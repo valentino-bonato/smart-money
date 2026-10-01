@@ -257,18 +257,33 @@ async function main() {
 
   /* ------------------------------------------------------------ gasto del mes */
   console.log("\n### Gasto de octubre por categoría");
-  const monthly = await db.execute<{ name: string; total: string }>(dsql`
-    select a.name, sum(e.amount)::text as total
+  // Agrupado POR MONEDA: sumar ARS y USD en un mismo total daría un número
+  // que no significa nada.
+  const monthly = await db.execute<{
+    name: string;
+    currency: string;
+    total: string;
+  }>(dsql`
+    select a.name, e.currency, sum(e.amount)::text as total
     from entries e
     join accounts a on a.id = e.account_id
     join transactions t on t.id = e.transaction_id
     where a.type = 'expense' and t.date >= '2026-10-01' and t.date < '2026-11-01'
-    group by a.name order by a.name
+    group by a.name, e.currency order by e.currency, a.name
   `);
-  for (const r of monthly) console.log(`  ${r.name.padEnd(28)} ${money(r.total).padStart(12)}`);
-  const totalMonth = sumAmounts(monthly.map((r) => r.total));
-  // Solo el caso 0. Los otros tres movieron plata y no son gasto.
-  check("gasto total del mes", totalMonth, "25000");
+  for (const r of monthly) {
+    console.log(
+      `  ${r.name.padEnd(28)} ${r.currency} ${money(r.total).padStart(12)}`,
+    );
+  }
+  const totalBy = (currency: string) =>
+    sumAmounts(
+      monthly.filter((r) => r.currency === currency).map((r) => r.total),
+    );
+  // En ARS, solo el caso 0: los otros tres movieron plata y no son gasto.
+  check("gasto del mes en ARS", totalBy("ARS"), "25000");
+  // En USD, el resumen de la tarjeta que trae el seed: 77 + 100 + 42 + 2.
+  check("gasto del mes en USD", totalBy("USD"), "221");
 
   /* --------------------------------------------------------------- limpieza */
   console.log("\n### Limpieza");
@@ -283,7 +298,8 @@ async function main() {
   `);
   check("transacciones desbalanceadas", String(unbalanced), "0");
   check("BBVA caja de ahorro restaurado", await balance("BBVA caja de ahorro"), "2691000");
-  check("Tarjeta restaurada", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
+  check("Tarjeta ARS restaurada", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
+  check("Tarjeta USD intacta", await balance("Tarjeta de crédito BBVA — USD"), "-221");
   check("Equity:FX:ARS restaurado", await balance("Equity:FX:ARS"), "0");
 
   console.log(failures === 0 ? "\nTodos los casos OK.\n" : `\n${failures} fallas.\n`);

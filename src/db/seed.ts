@@ -20,6 +20,13 @@ import { sql as dsql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { loadEnv } from "./env";
+import { recordExpense } from "./ledger";
+import {
+  accountBalances,
+  envelopeBalances,
+  netWorth,
+  unassignedPool,
+} from "./queries";
 import * as schema from "./schema";
 
 async function main() {
@@ -122,6 +129,8 @@ async function main() {
         // el gasto se incurre en dólares. Una cuenta = una moneda.
         ["Gastos:Suscripciones", "USD"],
         ["Gastos:Extras y regalos", "ARS"],
+        // En USD: el hostel de Amsterdam se pagó con la tarjeta en dólares.
+        ["Gastos:Viaje", "USD"],
       ] as const
     ).map(([name, currency]) => ({
       name,
@@ -618,6 +627,63 @@ async function main() {
       )
       .returning();
 
+    // ------------------------------------- resumen en dólares de octubre
+    // Los cuatro consumos del resumen que hay que pagar ahora. Van como
+    // transacciones reales y no como saldo de apertura, porque sí se sabe de
+    // qué son: la atribución al sobre es el punto de la app. El resumen en
+    // pesos, en cambio, quedó como saldo de apertura sin detalle.
+    //
+    // Pasan por recordExpense() dentro de esta misma transacción: el trigger
+    // deferido valida todo junto al COMMIT.
+    const cardUsd = acct("Tarjeta de crédito BBVA — USD").id;
+    const statement = [
+      {
+        amount: "77",
+        payee: "Hostel Amsterdam",
+        expense: "Gastos:Viaje",
+        envelope: "Viaje",
+        // El hostel no es una suscripción: es el viaje, pagado por adelantado.
+        description: "Hostel de Amsterdam",
+      },
+      {
+        amount: "100",
+        payee: "Claude",
+        expense: "Gastos:Suscripciones",
+        envelope: "Suscripciones",
+        description: null,
+      },
+      {
+        amount: "42",
+        payee: "Notion",
+        expense: "Gastos:Suscripciones",
+        envelope: "Suscripciones",
+        // 42 contra 12 de precio de lista: el caso de §8 de cargar estimado y
+        // corregir con el resumen. Los 30 de más dejan el sobre corto.
+        description: "Atípico — el precio normal son 12 USD/mes",
+      },
+      {
+        amount: "2",
+        payee: "YouTube Premium",
+        expense: "Gastos:Suscripciones",
+        envelope: "Suscripciones",
+        description: null,
+      },
+    ];
+
+    for (const line of statement) {
+      await recordExpense(tx, {
+        userId: user.id,
+        date: OPENING,
+        amount: line.amount,
+        currency: "USD",
+        paidFromAccountId: cardUsd,
+        expenseAccountId: acct(line.expense).id,
+        envelopeId: env(line.envelope).id,
+        payee: line.payee,
+        description: line.description,
+      });
+    }
+
     // Aprobar un plan materializa sus plan_lines como allocations con ese
     // plan_id. Reversible borrando las allocations del plan.
     //
@@ -643,72 +709,37 @@ async function main() {
   /* ------------------------------------------------------------ verificación */
 
   const money = (v: unknown) =>
-    Number(v).toLocaleString("es-AR", { maximumFractionDigits: 2 });
+    Number(v).toLocaleString("es-AR", { maximumFractionDigits: 4 });
 
-  const accountBalances = await db.execute(dsql`
-    select a.name, a.currency, a.type, sum(e.amount)::text as balance
-    from accounts a join entries e on e.account_id = a.id
-    group by a.id, a.name, a.currency, a.type, a.display_order
-    order by a.display_order
-  `);
-
-  const envelopeBalances = await db.execute(dsql`
-    select e.name, c.currency, coalesce(sum(al.amount), 0)::text as balance
-    from envelopes e
-    cross join (select unnest(enum_range(null::currency)) as currency) c
-    left join allocations al on al.envelope_id = e.id and al.currency = c.currency
-    group by e.id, e.name, c.currency, e.display_order
-    having coalesce(sum(al.amount), 0) <> 0
-    order by e.display_order, c.currency
-  `);
-
-  // pool_sin_asignar(currency) = Σ saldos de cuentas asset − Σ saldos de sobres
-  const pool = await db.execute(dsql`
-    with assets as (
-      select a.currency, sum(e.amount) as total
-      from accounts a join entries e on e.account_id = a.id
-      where a.type = 'asset'
-      group by a.currency
-    ), enveloped as (
-      select currency, sum(amount) as total from allocations group by currency
-    )
-    select c.currency,
-           coalesce(a.total, 0)::text as assets,
-           coalesce(v.total, 0)::text as enveloped,
-           (coalesce(a.total, 0) - coalesce(v.total, 0))::text as pool
-    from (select unnest(enum_range(null::currency)) as currency) c
-    left join assets a on a.currency = c.currency
-    left join enveloped v on v.currency = c.currency
-    order by c.currency
-  `);
-
-  const openingPool = await db.execute(dsql`
-    select (
-      (select sum(e.amount) from entries e join accounts a on a.id = e.account_id
-       where a.type = 'asset' and a.currency = 'ARS')
-      - (select sum(amount) from allocations where currency = 'ARS' and plan_id is null)
-    )::text as pool
-  `);
-
-  const planTotals = await db.execute(dsql`
-    select tier, sum(amount)::text as total, count(*)::int as lines
-    from plan_lines group by tier order by tier
-  `);
+  const accounts = await accountBalances(db);
+  const envelopes = await envelopeBalances(db);
+  const pool = await unassignedPool(db);
 
   console.log("\n=== Saldos por cuenta ===");
-  for (const r of accountBalances as unknown as Record<string, string>[]) {
-    console.log(`  ${r.name.padEnd(28)} ${r.currency}  ${money(r.balance).padStart(14)}`);
-  }
-  console.log("\n=== Saldos por sobre y moneda ===");
-  for (const r of envelopeBalances as unknown as Record<string, string>[]) {
-    console.log(`  ${r.name.padEnd(28)} ${r.currency}  ${money(r.balance).padStart(14)}`);
-  }
-  console.log("\n=== Pool sin asignar (post-plan) ===");
-  for (const r of pool as unknown as Record<string, string>[]) {
+  for (const r of accounts) {
     console.log(
-      `  ${r.currency}  activos ${money(r.assets).padStart(14)}  en sobres ${money(r.enveloped).padStart(14)}  pool ${money(r.pool).padStart(14)}`,
+      `  ${r.name.padEnd(30)} ${r.currency}  ${money(r.balance).padStart(14)}`,
     );
   }
+
+  console.log("\n=== Saldos por sobre y moneda ===");
+  for (const r of envelopes) {
+    const detail =
+      Number(r.spent) !== 0
+        ? `   (asignado ${money(r.allocated)} − gastado ${money(r.spent)})`
+        : "";
+    console.log(
+      `  ${r.name.padEnd(30)} ${r.currency}  ${money(r.balance).padStart(14)}${detail}`,
+    );
+  }
+
+  console.log("\n=== Pool sin asignar ===");
+  for (const r of pool) {
+    console.log(
+      `  ${r.currency}  activos ${money(r.assets).padStart(14)}  en sobres ${money(r.enveloped).padStart(14)}  pool ${money(r.pool).padStart(12)}`,
+    );
+  }
+
   const inflows = await db.execute(dsql`
     select s.name, i.amount::text as amount, i.currency, i.expected_date::text as expected_date, i.status
     from expected_inflows i join income_sources s on s.id = i.income_source_id
@@ -720,6 +751,20 @@ async function main() {
       `  ${r.name.padEnd(24)} ${money(r.amount).padStart(12)} ${r.currency}  ${r.expected_date}  ${r.status}`,
     );
   }
+
+  const planTotals = await db.execute(dsql`
+    select tier, sum(amount)::text as total, count(*)::int as lines
+    from plan_lines group by tier order by tier
+  `);
+
+  // Antes del plan: cuánta plata de la apertura no tenía propósito.
+  const openingPool = await db.execute(dsql`
+    select (
+      (select sum(e.amount) from entries e join accounts a on a.id = e.account_id
+       where a.type = 'asset' and a.currency = 'ARS')
+      - (select sum(amount) from allocations where currency = 'ARS' and plan_id is null)
+    )::text as pool
+  `);
 
   console.log("\n=== Totales del plan de octubre ===");
   for (const r of planTotals as unknown as Record<string, string>[]) {
@@ -764,28 +809,35 @@ async function main() {
   expect("plan · fondo de emergencia (ARS)", perEnvelope["Fondo de emergencia"], "1872000");
   expect("plan · suscripciones (ARS)", perEnvelope["Suscripciones"], "176421");
 
+  const usdCard = await db.execute<{ total: string }>(dsql`
+    select sum(e.amount)::text as total from entries e
+    join accounts a on a.id = e.account_id
+    where a.name = 'Tarjeta de crédito BBVA — USD'
+  `);
+  expect("resumen en dólares a pagar", row(usdCard)[0].total, "-221");
+
+  const monthlyUsd = await db.execute<{ total: string }>(dsql`
+    select sum(e.amount)::text as total
+    from entries e join accounts a on a.id = e.account_id
+    where a.type = 'expense' and e.currency = 'USD'
+  `);
+  expect("gasto en dólares de octubre", row(monthlyUsd)[0].total, "221");
+
   // Lo que queda sin propósito despues de aprobar el piso: los 200.000 del
   // resumen de la tarjeta (que no es un sobre) + los 15.000 que ya estaban en
   // Mercado Pago. Los 5.980.000 del nivel variable no están asignados porque
   // todavía no entraron.
-  expect("pool sin asignar post-plan (ARS)", row(pool)[0].pool, "215000");
-  expect("pool sin asignar post-plan (USD)", row(pool)[1].pool, "0");
+  expect("pool sin asignar post-plan (ARS)", pool[0].pool, "215000");
+  // El pool en USD da 221 justo porque la fórmula de §6 no mira los pasivos:
+  // son los dólares del fondo que van a pagar el resumen, y que ningún sobre
+  // reclama. Mismo efecto que los 200.000 del resumen en pesos.
+  expect("pool sin asignar post-plan (USD)", pool[1].pool, "221");
 
-  const netWorth = await db.execute(dsql`
-    with bal as (
-      select a.currency, a.type, sum(e.amount) as total
-      from accounts a join entries e on e.account_id = a.id
-      where a.type in ('asset', 'liability')
-      group by a.currency, a.type
-    )
-    select sum(
-      case when b.currency = 'USD' then b.total * ${USD_ARS}::numeric else b.total end
-    )::text as ars
-    from bal b
-  `);
-  // §5 da 8.358.100 porque no resta la deuda de la tarjeta y redondea el tramo
-  // USD. Con el pasivo de 200.000 y el dólar exacto a 1.550: 8.158.350.
-  expect("patrimonio total (ARS)", row(netWorth)[0].ars, "8158350");
+  const worth = await netWorth(db, { in: "ARS", rate: USD_ARS, from: "USD" });
+  // §5 da 8.358.100 porque no resta ninguna deuda de tarjeta y redondea el
+  // tramo USD. Restando los dos resúmenes a pagar — 200.000 ARS y 221 USD, que
+  // a 1.550 son 342.550 — y con el dólar exacto: 7.815.800.
+  expect("patrimonio total (ARS)", worth, "7815800");
 
   const invariant = await db.execute(dsql`
     select count(*)::int as unbalanced from (

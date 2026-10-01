@@ -59,6 +59,26 @@ tiene. Hace falta porque el de Suscripciones son 113,82 **USD** aunque el sobre
 se consuma en ARS: no se puede inferir de `target_currency`, que solo existe en
 las metas.
 
+## Cálculos derivados: un solo lugar
+
+`src/db/queries.ts` tiene `envelopeBalances`, `unassignedPool`,
+`accountBalances` y `netWorth`. **No reimplementar estas fórmulas en una
+pantalla.** Si el saldo de un sobre se calcula distinto en dos lugares, la app
+miente en uno de los dos.
+
+El saldo del sobre es `Σ allocations − Σ partidas con envelope_id` — no solo las
+allocations. Olvidarse de restar los gastos es el error fácil, y da un sobre que
+nunca baja.
+
+Dos límites conocidos de las fórmulas de §6:
+
+- `unassignedPool` mira solo cuentas `asset`, así que un resumen de tarjeta
+  pendiente no lo baja: el pool se ve más rico de lo que es por ese monto.
+- El saldo de un sobre meta baja cuando se gasta de él, pero `target_amount` no.
+  Con el hostel de Amsterdam ya pagado, el Viaje muestra 626 USD contra un
+  objetivo de 7.295 — y el faltante real es 77 menor. Hay que resolverlo al
+  construir el catch-up (paso 5).
+
 ## Convención de signos
 
 Los pasivos van **negativos** cuando se debe plata (igual que Beancount). El

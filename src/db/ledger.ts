@@ -136,7 +136,13 @@ export async function createTransaction(
 
   // Si ya venimos dentro de una transacción, no abrimos otra: el trigger
   // deferido tiene que validar al COMMIT de la transacción externa.
-  return "transaction" in exec ? exec.transaction(run) : run(exec as Tx);
+  // Se detecta por `rollback`, que existe en una transacción de drizzle y no
+  // en el `db` raíz. `transaction` no sirve para distinguirlos: una
+  // transacción también la expone, para savepoints anidados.
+  const isTransaction = typeof (exec as Tx).rollback === "function";
+  return isTransaction
+    ? run(exec as Tx)
+    : (exec as typeof Database).transaction(run);
 }
 
 /* --------------------------------------------------------------- precios --- */
