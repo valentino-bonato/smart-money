@@ -274,3 +274,130 @@ export async function goalProgress(
   `);
   return rows as unknown as GoalProgress[];
 }
+
+export type PayeeSuggestion = {
+  payee: string;
+  /** Categoría usada la última vez con este comercio. */
+  expenseAccountId: string | null;
+  envelopeId: string | null;
+  paidFromAccountId: string | null;
+  currency: Currency | null;
+  /** Cuántas veces se cargó. Ordena la lista. */
+  timesUsed: number;
+  lastUsed: string;
+};
+
+/**
+ * Qué categoría, sobre y cuenta se usaron la última vez con cada comercio.
+ *
+ * Esto es el corazón de la reducción de fricción de §8: la segunda vez que
+ * cargás "Coto" no tenés que elegir nada. Arranca vacío y aprende del uso —
+ * no hay lista precargada de comercios.
+ *
+ * `distinct on` se queda con la fila más reciente de cada payee — por fecha y
+ * después por `created_at`, no por id — y la cuenta de usos sale aparte, solo
+ * para ordenar las sugerencias.
+ */
+export async function payeeSuggestions(
+  exec: Executor,
+  opts: { userId: string; limit?: number },
+): Promise<PayeeSuggestion[]> {
+  const rows = await exec.execute<PayeeSuggestion>(sql`
+    with tagged as (
+      -- La partida de gasto de cada transacción con payee: de ahí salen la
+      -- categoría, el sobre y la moneda.
+      select
+        t.id, t.payee, t.date, t.created_at,
+        e.account_id  as expense_account_id,
+        e.envelope_id as envelope_id,
+        e.currency    as currency
+      from transactions t
+      join entries e on e.transaction_id = t.id
+      join accounts a on a.id = e.account_id
+      where t.user_id = ${opts.userId}
+        and t.payee is not null
+        and a.type = 'expense'
+    ), counted as (
+      select payee, count(*)::int as times_used, max(date)::text as last_used
+      from tagged group by payee
+    ), latest as (
+      select distinct on (payee)
+        payee, id, expense_account_id, envelope_id, currency
+      from tagged
+      -- created_at y no id: con varias cargas el mismo día, ordenar por uuid
+      -- elegía una fila al azar como "la última".
+      order by payee, date desc, created_at desc
+    )
+    select
+      l.payee                                  as payee,
+      l.expense_account_id                     as "expenseAccountId",
+      l.envelope_id                            as "envelopeId",
+      l.currency                               as currency,
+      -- De dónde salió la plata: la contrapartida del mismo asiento.
+      (select e2.account_id from entries e2
+         join accounts a2 on a2.id = e2.account_id
+        where e2.transaction_id = l.id
+          and a2.type in ('asset', 'liability')
+        limit 1)                               as "paidFromAccountId",
+      c.times_used                             as "timesUsed",
+      c.last_used                              as "lastUsed"
+    from latest l
+    join counted c on c.payee = l.payee
+    order by c.times_used desc, c.last_used desc
+    limit ${opts.limit ?? 50}
+  `);
+  return rows as unknown as PayeeSuggestion[];
+}
+
+export type RecentTransaction = {
+  id: string;
+  date: string;
+  payee: string | null;
+  description: string | null;
+  amount: string;
+  currency: Currency;
+  category: string | null;
+  envelope: string | null;
+  paidFrom: string | null;
+};
+
+/** Los últimos movimientos, para confirmar de un vistazo que entró bien. */
+export async function recentTransactions(
+  exec: Executor,
+  opts: { userId: string; limit?: number },
+): Promise<RecentTransaction[]> {
+  const rows = await exec.execute<RecentTransaction>(sql`
+    select
+      t.id                       as id,
+      t.date::text               as date,
+      t.payee                    as payee,
+      t.description              as description,
+      coalesce(exp.amount, any_leg.amount)::text as amount,
+      coalesce(exp.currency, any_leg.currency)   as currency,
+      exp.name                   as category,
+      env.name                   as envelope,
+      src.name                   as "paidFrom"
+    from transactions t
+    left join lateral (
+      select e.amount, e.currency, a.name, e.envelope_id
+      from entries e join accounts a on a.id = e.account_id
+      where e.transaction_id = t.id and a.type = 'expense' limit 1
+    ) exp on true
+    left join lateral (
+      select e.amount, e.currency from entries e
+      where e.transaction_id = t.id order by e.amount desc limit 1
+    ) any_leg on true
+    left join envelopes env on env.id = exp.envelope_id
+    left join lateral (
+      select a.name from entries e join accounts a on a.id = e.account_id
+      where e.transaction_id = t.id
+        and a.type in ('asset', 'liability')
+        and e.amount < 0
+      limit 1
+    ) src on true
+    where t.user_id = ${opts.userId}
+    order by t.date desc, t.created_at desc
+    limit ${opts.limit ?? 15}
+  `);
+  return rows as unknown as RecentTransaction[];
+}

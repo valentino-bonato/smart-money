@@ -82,6 +82,36 @@ tiene. Hace falta porque el de Suscripciones son 113,82 **USD** aunque el sobre
 se consuma en ARS: no se puede inferir de `target_currency`, que solo existe en
 las metas.
 
+## Pantalla de carga
+
+`src/app/page.tsx` (server component) + `quick-entry.tsx` (client) +
+`actions.ts` (server action). Es la pantalla más importante del v1: §8 dice que
+si cargar un gasto pasa de ~10 segundos, la app se abandona en tres semanas.
+
+Decisiones que no conviene deshacer sin motivo:
+
+- **La moneda no se pide.** La define la cuenta de gasto elegida, y las cuentas
+  de origen se filtran a esa misma moneda. Sin eso el trigger rechaza la carga
+  recién al enviar.
+- **Nada de `setState` en un efecto** (`react-hooks/set-state-in-effect` lo
+  rechaza). Después de cargar, los campos se remontan con `key={state.token}`;
+  la cuenta de origen efectiva es un valor derivado, no estado espejado.
+- **La sugerencia por comercio arranca vacía y aprende del uso**
+  (`payeeSuggestions`). No hay lista precargada de comercios.
+- El saldo del sobre se muestra junto al selector, porque el momento en que
+  importa es justo antes de gastar.
+
+En Next 16: `refresh()` de `next/cache` para refrescar después de mutar (no
+`revalidatePath`), y el layout recibe `LayoutProps<"/">` tipado.
+
+## Parseo de montos
+
+`parseAmountInput` en `src/lib/money.ts`. La coma es el separador decimal; un
+punto con 1 o 2 dígitos detrás también. **Un monto ambiguo falla, no se
+adivina**: "1.0000001" se rechaza en vez de volverse 10.000.001, y los grupos
+de miles se validan (el primero de 1 a 3 dígitos, el resto de exactamente 3).
+Los casos están en `db:verify`.
+
 ## Cálculos derivados: un solo lugar
 
 `src/db/queries.ts` tiene `envelopeBalances`, `unassignedPool`,

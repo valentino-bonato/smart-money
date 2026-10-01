@@ -55,6 +55,13 @@ La compra de dólares pasa por las cuentas de FX: la pata ARS cierra contra
 `Equity:FX:ARS` y la pata USD contra `Equity:FX:USD`. Cruzar monedas en un mismo
 asiento sin esas patas tira un error explícito antes de tocar la base.
 
+## Pantalla de carga
+
+`/` es la carga rápida: monto → comercio → categoría y sobre sugeridos → listo.
+La sugerencia por comercio arranca vacía y aprende del uso. La moneda la define
+la categoría, y las cuentas de origen se filtran a esa moneda. El saldo del
+sobre se muestra junto al selector, que es el momento en que importa.
+
 ## Suscripciones
 
 Las tres (Claude 100, Notion 12, YouTube 1,82 USD) se facturan en dólares

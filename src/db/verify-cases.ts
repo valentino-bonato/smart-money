@@ -25,6 +25,8 @@ import {
   recordTransfer,
   sumAmounts,
 } from "./ledger";
+import { payeeSuggestions } from "./queries";
+import { MoneyParseError, parseAmountInput } from "../lib/money";
 import { prepareRecurringCharges } from "./recurring";
 import * as schema from "./schema";
 
@@ -200,6 +202,98 @@ async function main() {
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
   }
 
+  /* ------------------------------------------- parseo de montos (UI) --- */
+  // Cómo se escribe plata de verdad en Argentina. El caso que importa es
+  // "1.550": en esta app es mil quinientos cincuenta, no uno con 55.
+  console.log("\n### Parseo de montos");
+  for (const [input, expected] of [
+    ["25000", "25000"],
+    ["25.000", "25000"],
+    ["25.000,50", "25000.50"],
+    ["25000.50", "25000.50"],
+    ["1.550", "1550"],
+    ["1.55", "1.55"],
+    ["1.234.567", "1234567"],
+    ["113,82", "113.82"],
+    [" 240000 ", "240000"],
+  ] as const) {
+    const got = parseAmountInput(input);
+    const ok = got === expected;
+    if (!ok) failures++;
+    console.log(
+      `  ${ok ? "✓" : "✗"} "${input}" → ${got}${ok ? "" : `  (esperado ${expected})`}`,
+    );
+  }
+  for (const bad of ["", "0", "abc", "1,2,3", "1.0000001", "1.5500", "25,12345"]) {
+    try {
+      parseAmountInput(bad);
+      failures++;
+      console.log(`  ✗ "${bad}": NO falló, y debía fallar`);
+    } catch (err) {
+      if (!(err instanceof MoneyParseError)) throw err;
+      console.log(`  ✓ "${bad}" rechazado: ${err.message}`);
+    }
+  }
+
+  /* --------------------------------- sugerencia por comercio (UI) --- */
+  // El corazón de la reducción de fricción de §8: la segunda vez que cargás
+  // "Coto" no tenés que elegir ni categoría ni sobre.
+  console.log("\n### Sugerencia por comercio");
+  {
+    const before = await payeeSuggestions(db, { userId: user.id });
+    check(
+      "Carrefour todavía no se conoce",
+      String(before.filter((s) => s.payee === "Carrefour").length),
+      "0",
+    );
+
+    // Dos cargas en Carrefour, la segunda desde otra cuenta.
+    for (const paidFrom of ["Mercado Pago", "BBVA caja de ahorro"]) {
+      const { id } = await recordExpense(db, {
+        userId: user.id,
+        date: DATE,
+        amount: "18000",
+        currency: "ARS",
+        paidFromAccountId: acct(paidFrom),
+        expenseAccountId: acct("Gastos:Comida y súper"),
+        envelopeId: env("Comida y súper"),
+        payee: "Carrefour",
+      });
+      created.push(id);
+    }
+
+    const after = await payeeSuggestions(db, { userId: user.id });
+    const coto = after.find((s) => s.payee === "Carrefour");
+    if (!coto) {
+      failures++;
+      console.log("  ✗ Carrefour no apareció en las sugerencias");
+    } else {
+      check("Carrefour · veces usado", String(coto.timesUsed), "2");
+      check(
+        "Carrefour · sugiere la categoría",
+        coto.expenseAccountId === acct("Gastos:Comida y súper") ? "1" : "0",
+        "1",
+      );
+      check(
+        "Carrefour · sugiere el sobre",
+        coto.envelopeId === env("Comida y súper") ? "1" : "0",
+        "1",
+      );
+      // La cuenta sugerida es la de la ÚLTIMA carga, no la primera.
+      check(
+        "Carrefour · sugiere la última cuenta usada",
+        coto.paidFromAccountId === acct("BBVA caja de ahorro") ? "1" : "0",
+        "1",
+      );
+      // El más usado va primero: ordena la lista del comercio.
+      check(
+        "Carrefour · primero en la lista",
+        after[0].payee === "Carrefour" ? "1" : "0",
+        "1",
+      );
+    }
+  }
+
   /* ------------------------------------------------ gastos recurrentes --- */
   console.log("\n### Gastos recurrentes · preparar el resumen del mes");
   {
@@ -356,10 +450,11 @@ async function main() {
     sumAmounts(
       monthly.filter((r) => r.currency === currency).map((r) => r.total),
     );
-  // En ARS: el caso 0 (25.000 en el súper) más las clases de inglés que
-  // acaba de crear la prueba de recurrentes. Los tres casos raros movieron
-  // plata y no aparecen acá, que es el punto de §8.
-  check("gasto del mes en ARS", totalBy("ARS"), "265000");
+  // En ARS: el caso 0 (25.000), las dos cargas de Coto de la prueba de
+  // sugerencias (18.000 x 2) y las clases de inglés que creó la prueba de
+  // recurrentes (240.000). Los tres casos raros movieron plata y no aparecen
+  // acá, que es el punto de §8.
+  check("gasto del mes en ARS", totalBy("ARS"), "301000");
   // En USD, el resumen de la tarjeta que trae el seed: 77 + 100 + 42 + 2.
   check("gasto del mes en USD", totalBy("USD"), "221");
 
