@@ -118,6 +118,12 @@ export const envelopes = pgTable(
       precision: 20,
       scale: 4,
     }),
+    // El aporte tiene su propia moneda: el del viaje son 824 USD y el de
+    // "Auto — corriente" son 450.000 ARS. No se puede derivar de
+    // target_currency, porque un sobre de gasto puede tener aporte en USD sin
+    // tener objetivo (las suscripciones cuestan 113,82 USD y se pagan con una
+    // tarjeta en ARS).
+    contributionCurrency: currency("contribution_currency"),
   },
   (t) => [
     unique("envelopes_user_name").on(t.userId, t.name),
@@ -125,6 +131,10 @@ export const envelopes = pgTable(
     check(
       "envelopes_target_currency_pair",
       sql`(${t.targetAmount} is null) = (${t.targetCurrency} is null)`,
+    ),
+    check(
+      "envelopes_contribution_currency_pair",
+      sql`(${t.contributionAmount} is null) = (${t.contributionCurrency} is null)`,
     ),
   ],
 );

@@ -35,6 +35,17 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
 
+## Sobres
+
+Son 10, no los 9 de la spec: se agregó **Suscripciones**, porque la cascada de
+§4 trata la tarjeta solo como un pago y dejaba ~176.000 ARS por mes de gasto
+fijo sin propósito asignado.
+
+El aporte tiene moneda propia (`contribution_currency`), columna que la spec no
+tiene. Hace falta porque el de Suscripciones son 113,82 **USD** aunque el sobre
+se consuma en ARS: no se puede inferir de `target_currency`, que solo existe en
+las metas.
+
 ## Convención de signos
 
 Los pasivos van **negativos** cuando se debe plata (igual que Beancount). El

@@ -4,7 +4,7 @@
  * Contenido, según la spec:
  *   · 6 cuentas de usuario + "Me deben" + 6 de gasto + 4 de ingreso
  *     + las de sistema
- *   · 9 sobres (5 de gasto + 4 de tipo meta, de los cuales 3 tienen objetivo)
+ *   · 10 sobres (6 de gasto + 4 de tipo meta, de los cuales 3 tienen objetivo)
  *   · saldos de apertura al 1-oct-2026 contra Equity:Opening
  *   · 3 fuentes de ingreso
  *   · 3 metas (objetivo, fecha y aporte mensual)
@@ -187,13 +187,10 @@ async function main() {
     };
 
     // ----------------------------------------------------------------- sobres
-    // 9 sobres. "Tarjeta" NO es un sobre: los consumos de la tarjeta ya se
+    // 10 sobres. "Tarjeta" NO es un sobre: los consumos de la tarjeta ya se
     // taguean a su sobre al consumirse, así que reservar un sobre para el
     // resumen contaría doble. El pago del resumen es una línea de plan contra
     // la cuenta de la tarjeta.
-    //
-    // Para contribution_amount la moneda es target_currency cuando la hay
-    // (metas) y ARS cuando no (sobres de gasto).
     const envelopeRows = await tx
       .insert(schema.envelopes)
       .values([
@@ -205,6 +202,7 @@ async function main() {
           displayOrder: 1,
           contributionRule: "fixed",
           contributionAmount: "450000",
+          contributionCurrency: "ARS",
         },
         {
           userId: user.id,
@@ -214,6 +212,7 @@ async function main() {
           displayOrder: 2,
           contributionRule: "fixed",
           contributionAmount: "80000",
+          contributionCurrency: "ARS",
         },
         {
           userId: user.id,
@@ -223,6 +222,7 @@ async function main() {
           displayOrder: 3,
           contributionRule: "fixed",
           contributionAmount: "150000",
+          contributionCurrency: "ARS",
         },
         {
           userId: user.id,
@@ -232,13 +232,29 @@ async function main() {
           displayOrder: 4,
           contributionRule: "fixed",
           contributionAmount: "150000",
+          contributionCurrency: "ARS",
+        },
+        // El aporte va en USD porque el precio de lista está en USD: Claude
+        // 100 + Notion 12 + YouTube 1,82. La tarjeta las cobra en ARS al tipo
+        // de cambio efectivo del resumen, que no es el dólar oficial.
+        // Acumula para absorber la diferencia entre el cargo estimado y el
+        // real cuando llega el resumen.
+        {
+          userId: user.id,
+          name: "Suscripciones",
+          kind: "spending",
+          rollover: "accumulate",
+          displayOrder: 5,
+          contributionRule: "fixed",
+          contributionAmount: "113.82",
+          contributionCurrency: "USD",
         },
         {
           userId: user.id,
           name: "Puntuales del mes",
           kind: "spending",
           rollover: "reset",
-          displayOrder: 5,
+          displayOrder: 6,
           // Sin regla: los puntuales se cargan a mano mes a mes.
           contributionRule: null,
         },
@@ -248,33 +264,35 @@ async function main() {
           name: "Viaje",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 6,
+          displayOrder: 7,
           targetAmount: "7295",
           targetCurrency: "USD",
           targetDate: "2027-06-01", // fecha dura
           deadlineHard: true,
           contributionRule: "deadline",
           contributionAmount: "824",
+          contributionCurrency: "USD",
         },
         {
           userId: user.id,
           name: "Auto — ahorro",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 7,
+          displayOrder: 8,
           targetAmount: "10000",
           targetCurrency: "USD",
           targetDate: "2027-09-01", // blanda
           deadlineHard: false,
           contributionRule: "deadline",
           contributionAmount: "863",
+          contributionCurrency: "USD",
         },
         {
           userId: user.id,
           name: "Fondo de emergencia",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 8,
+          displayOrder: 9,
           targetAmount: "2000",
           targetCurrency: "USD",
           // Sin fecha: prioridad 1 del nivel 2, se completa lo antes posible.
@@ -288,7 +306,7 @@ async function main() {
           name: "CEDEARs",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 9,
+          displayOrder: 10,
           // Sin techo: se lleva el resto de la cascada.
           contributionRule: "remainder",
         },
