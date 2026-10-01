@@ -191,6 +191,12 @@ Decisiones que no conviene deshacer sin motivo:
   (`payeeSuggestions`). No hay lista precargada de comercios.
 - El saldo del sobre se muestra junto al selector, porque el momento en que
   importa es justo antes de gastar.
+- **Un asiento no tiene "un monto".** Tiene partidas, y pueden ser muchas y en
+  varias monedas: el saldo de apertura son siete. `recentTransactions` devuelve
+  los totales **por moneda** de lo que entró, salteando las cuentas de sistema,
+  y clasifica el movimiento (gasto, ingreso, transferencia, pago, cambio,
+  apertura). Mostrar una partida suelta —la más grande, pongamos— da un número
+  que no significa nada.
 
 En Next 16: `refresh()` de `next/cache` para refrescar después de mutar (no
 `revalidatePath`), y el layout recibe `LayoutProps<"/">` tipado.

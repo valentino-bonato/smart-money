@@ -349,55 +349,105 @@ export async function payeeSuggestions(
   return rows as unknown as PayeeSuggestion[];
 }
 
+export type MovementKind =
+  | "gasto"
+  | "ingreso"
+  | "transferencia"
+  | "pago"
+  | "cambio"
+  | "apertura";
+
 export type RecentTransaction = {
   id: string;
   date: string;
   payee: string | null;
   description: string | null;
-  amount: string;
-  currency: Currency;
-  category: string | null;
+  kind: MovementKind;
   envelope: string | null;
-  paidFrom: string | null;
+  category: string | null;
+  /** Lo que entró, por moneda. Un asiento puede tocar varias. */
+  inflows: { currency: Currency; amount: string }[];
+  /** Lo que salió, por moneda. Solo se muestra en un cambio de moneda. */
+  outflows: { currency: Currency; amount: string }[];
 };
 
-/** Los últimos movimientos, para confirmar de un vistazo que entró bien. */
+/**
+ * Los últimos movimientos, para confirmar de un vistazo que entró bien.
+ *
+ * Un asiento NO tiene "un monto": tiene partidas, y pueden ser muchas y en
+ * varias monedas. El saldo de apertura son siete. Mostrar una sola —la más
+ * grande, pongamos— da un número que no significa nada.
+ *
+ * Entonces se devuelven los totales por moneda de lo que entró, salteando las
+ * cuentas de sistema (`Equity:*`), que el usuario no ve y que solo son la
+ * contrapartida técnica. Para un gasto eso es el gasto, para una transferencia
+ * lo transferido, para un pago lo pagado, y para la apertura lo que había.
+ */
 export async function recentTransactions(
   exec: Executor,
   opts: { userId: string; limit?: number },
 ): Promise<RecentTransaction[]> {
   const rows = await exec.execute<RecentTransaction>(sql`
+    with legs as (
+      select t.id, e.amount, e.currency, e.envelope_id,
+             a.type as account_type, a.is_system, a.name as account_name
+      from transactions t
+      join entries e on e.transaction_id = t.id
+      join accounts a on a.id = e.account_id
+      where t.user_id = ${opts.userId}
+    ), recent as (
+      select t.id, t.date, t.payee, t.description, t.created_at
+      from transactions t
+      where t.user_id = ${opts.userId}
+      order by t.date desc, t.created_at desc
+      limit ${opts.limit ?? 15}
+    )
     select
-      t.id                       as id,
-      t.date::text               as date,
-      t.payee                    as payee,
-      t.description              as description,
-      coalesce(exp.amount, any_leg.amount)::text as amount,
-      coalesce(exp.currency, any_leg.currency)   as currency,
-      exp.name                   as category,
-      env.name                   as envelope,
-      src.name                   as "paidFrom"
-    from transactions t
-    left join lateral (
-      select e.amount, e.currency, a.name, e.envelope_id
-      from entries e join accounts a on a.id = e.account_id
-      where e.transaction_id = t.id and a.type = 'expense' limit 1
-    ) exp on true
-    left join lateral (
-      select e.amount, e.currency from entries e
-      where e.transaction_id = t.id order by e.amount desc limit 1
-    ) any_leg on true
-    left join envelopes env on env.id = exp.envelope_id
-    left join lateral (
-      select a.name from entries e join accounts a on a.id = e.account_id
-      where e.transaction_id = t.id
-        and a.type in ('asset', 'liability')
-        and e.amount < 0
-      limit 1
-    ) src on true
-    where t.user_id = ${opts.userId}
-    order by t.date desc, t.created_at desc
-    limit ${opts.limit ?? 15}
+      r.id                     as id,
+      r.date::text             as date,
+      r.payee                  as payee,
+      r.description            as description,
+      case
+        when exists (select 1 from legs l
+                      where l.id = r.id and l.account_type = 'expense')
+          then 'gasto'
+        when exists (select 1 from legs l
+                      where l.id = r.id and l.account_name like 'Equity:Opening%')
+          then 'apertura'
+        when exists (select 1 from legs l
+                      where l.id = r.id and l.account_name like 'Equity:FX%')
+          then 'cambio'
+        when exists (select 1 from legs l
+                      where l.id = r.id and l.account_type = 'income')
+          then 'ingreso'
+        when exists (select 1 from legs l
+                      where l.id = r.id and l.account_type = 'liability'
+                        and l.amount > 0)
+          then 'pago'
+        else 'transferencia'
+      end                      as kind,
+      (select e.name from legs l join envelopes e on e.id = l.envelope_id
+        where l.id = r.id limit 1)            as envelope,
+      (select l.account_name from legs l
+        where l.id = r.id and l.account_type = 'expense' limit 1) as category,
+      coalesce((
+        select json_agg(json_build_object('currency', x.currency,
+                                          'amount', x.total::text)
+                        order by x.total desc)
+        from (select l.currency, sum(l.amount) as total from legs l
+               where l.id = r.id and not l.is_system and l.amount > 0
+               group by l.currency) x
+      ), '[]'::json)                          as inflows,
+      coalesce((
+        select json_agg(json_build_object('currency', x.currency,
+                                          'amount', (-x.total)::text)
+                        order by x.total)
+        from (select l.currency, sum(l.amount) as total from legs l
+               where l.id = r.id and not l.is_system and l.amount < 0
+               group by l.currency) x
+      ), '[]'::json)                          as outflows
+    from recent r
+    order by r.date desc, r.created_at desc
   `);
   return rows as unknown as RecentTransaction[];
 }

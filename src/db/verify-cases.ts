@@ -30,7 +30,7 @@ import {
   moveBetweenEnvelopes,
   returnToPool,
 } from "./envelopes";
-import { payeeSuggestions, unassignedPool } from "./queries";
+import { payeeSuggestions, recentTransactions, unassignedPool } from "./queries";
 import {
   missingEntries,
   reconcilableAccounts,
@@ -224,6 +224,70 @@ async function main() {
     // convertir, que es exactamente la diferencia de cambio que queda en las
     // cuentas de FX.
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
+  }
+
+  /* ----------------------------------- últimos movimientos (UI) --- */
+  // Un asiento no tiene "un monto": tiene partidas, y pueden ser muchas y en
+  // varias monedas. La lista tiene que mostrar los totales por moneda y no una
+  // partida suelta.
+  console.log("\n### Últimos movimientos");
+  {
+    const recent = await recentTransactions(db, { userId: user.id, limit: 30 });
+    const find = (text: string) =>
+      recent.find(
+        (r) => (r.payee ?? r.description ?? "").includes(text),
+      );
+
+    const opening = find("Saldos de apertura");
+    if (!opening) {
+      failures++;
+      console.log("  ✗ no apareció el saldo de apertura");
+    } else {
+      check("apertura · clasificada", opening.kind === "apertura" ? "1" : "0", "1");
+      // Siete partidas, dos monedas: tiene que mostrar las dos y no una sola.
+      check("apertura · monedas mostradas", String(opening.inflows.length), "2");
+      check(
+        "apertura · total en ARS",
+        opening.inflows.find((i) => i.currency === "ARS")!.amount,
+        "6041100",
+      );
+      check(
+        "apertura · total en USD",
+        opening.inflows.find((i) => i.currency === "USD")!.amount,
+        "1495",
+      );
+    }
+
+    const kinds: [string, string][] = [
+      ["Plata del auto", "transferencia"],
+      ["Pago del resumen", "pago"],
+      ["Cambio ARS", "cambio"],
+      ["Coto", "gasto"],
+    ];
+    for (const [text, kind] of kinds) {
+      const row = find(text);
+      if (!row) {
+        failures++;
+        console.log(`  ✗ no apareció "${text}"`);
+        continue;
+      }
+      check(`${text} · ${kind}`, row.kind === kind ? "1" : "0", "1");
+    }
+
+    // En un cambio se muestran las dos patas: de dónde salió y qué entró.
+    const fx = find("Cambio ARS");
+    if (fx) {
+      check("cambio · muestra lo que salió", String(fx.outflows.length), "1");
+      check("cambio · salieron los pesos", fx.outflows[0].amount, "2000000");
+      check("cambio · entraron los dólares", fx.inflows[0].amount, "1290.3225");
+    }
+
+    for (const r of recent.slice(0, 6)) {
+      console.log(
+        `    ${r.kind.padEnd(14)} ${(r.payee ?? r.description ?? "—").slice(0, 28).padEnd(30)} ` +
+          r.inflows.map((i) => `${money(i.amount)} ${i.currency}`).join(" + "),
+      );
+    }
   }
 
   /* ------------------------------------------------- conciliación --- */

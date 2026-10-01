@@ -120,17 +120,39 @@ export default async function Page() {
           <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
             {recent.map((t) => (
               <li key={t.id} className="flex items-baseline gap-3 py-2 text-sm">
-                <span className="w-16 shrink-0 opacity-50 tabular-nums">
+                <span className="w-12 shrink-0 opacity-50 tabular-nums">
                   {t.date.slice(5)}
                 </span>
-                <span className="flex-1 truncate">
-                  {t.payee ?? t.description ?? "—"}
-                  {t.envelope ? (
-                    <span className="opacity-50"> · {t.envelope}</span>
-                  ) : null}
+                <span className="flex-1 min-w-0">
+                  <span className="truncate block">
+                    {t.payee ?? t.description ?? "—"}
+                  </span>
+                  <span className="text-xs opacity-50">
+                    {t.kind === "gasto"
+                      ? (t.envelope ?? t.category?.replace(/^Gastos:/, "") ?? "gasto")
+                      : t.kind}
+                  </span>
                 </span>
-                <span className="tabular-nums shrink-0">
-                  {formatMoney(t.amount, t.currency)}
+                {/* Un asiento puede tocar varias monedas: se muestran todas.
+                    En un cambio, además, de dónde salió. */}
+                <span className="flex flex-col items-end shrink-0 tabular-nums">
+                  {t.kind === "cambio" && t.outflows.length ? (
+                    <span className="text-xs opacity-50">
+                      {t.outflows
+                        .map((o) => formatMoney(o.amount, o.currency))
+                        .join(" + ")}
+                      {" →"}
+                    </span>
+                  ) : null}
+                  {t.inflows.length ? (
+                    t.inflows.map((i) => (
+                      <span key={i.currency}>
+                        {formatMoney(i.amount, i.currency)}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="opacity-40">—</span>
+                  )}
                 </span>
               </li>
             ))}
