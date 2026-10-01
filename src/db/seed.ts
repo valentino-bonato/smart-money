@@ -8,7 +8,9 @@
  *   · 3 fuentes de ingreso
  *   · 3 metas (objetivo, fecha y aporte mensual)
  *   · el precio del dólar oficial: 1.550
- *   · el plan de octubre 2026, aprobado, con sus allocations
+ *   · el plan de octubre 2026, aprobado, con las allocations del nivel piso
+ *     (las del nivel variable esperan a que el cobro entre)
+ *   · los 2 cobros esperados del nivel variable (consultoría + hito)
  *
  * Toda la plata viaja como `string`: `numeric` mapea a `string` en
  * drizzle-orm@0.45.3 y no se convierte a `number` en ningún punto.
@@ -255,7 +257,9 @@ async function main() {
     });
 
     // ------------------------------------------------- fuentes de ingreso (3)
-    await tx.insert(schema.incomeSources).values([
+    const incomeSourceRows = await tx
+      .insert(schema.incomeSources)
+      .values([
       {
         userId: user.id,
         name: "Sueldo",
@@ -279,6 +283,35 @@ async function main() {
         expectedAmount: null,
         currency: "ARS",
       },
+      ])
+      .returning();
+
+    const src = (name: string) => {
+      const row = incomeSourceRows.find((s) => s.name === name);
+      if (!row) throw new Error(`Fuente de ingreso inexistente: ${name}`);
+      return row;
+    };
+
+    // Los dos cobros del nivel variable de octubre todavía no entraron: al
+    // 1-oct solo el sueldo está acreditado. §4: los cobros esperados se
+    // registran con monto y fecha estimada, se muestran y NO se asignan hasta
+    // que entran. `expected_date` es un placeholder a fin de mes: la spec no
+    // da fecha para ninguno de los dos.
+    await tx.insert(schema.expectedInflows).values([
+      {
+        incomeSourceId: src("Consultoría por hora").id,
+        amount: "4780000",
+        currency: "ARS",
+        expectedDate: "2026-10-31",
+        status: "expected",
+      },
+      {
+        incomeSourceId: src("Desarrollos").id,
+        amount: "1200000",
+        currency: "ARS",
+        expectedDate: "2026-10-31",
+        status: "expected",
+      },
     ]);
 
     // ------------------------------------------- saldos de apertura (1 asiento)
@@ -294,6 +327,9 @@ async function main() {
       })
       .returning();
 
+    // Signo: los pasivos van negativos cuando se debe plata. El patrimonio es
+    // la suma llana de asset + liability, sin invertir nada.
+    //
     // La cuenta corriente del auto abre en 0: no lleva partida
     // (check entries_amount_nonzero).
     const openingBalances = [
@@ -301,6 +337,10 @@ async function main() {
       { account: "Mercado Pago", amount: "15000", currency: "ARS" },
       { account: "Cocos Capital — CEDEARs", amount: "3335100", currency: "ARS" },
       { account: "Cocos Capital — fondo USD", amount: "1495", currency: "USD" },
+      // La tabla de saldos de apertura de §5 no lista la tarjeta, pero §5 dice
+      // que el resumen real es 200.000 y el plan reserva eso para pagarlo. Sin
+      // el pasivo, el plan pagaría una deuda que no existe en la base.
+      { account: "Tarjeta de crédito BBVA", amount: "-200000", currency: "ARS" },
     ] as const;
 
     await tx.insert(schema.entries).values(
@@ -317,7 +357,7 @@ async function main() {
       {
         transactionId: openingTx.id,
         accountId: acct("Equity:Opening:ARS").id,
-        amount: "-6041100", // 2691000 + 15000 + 3335100
+        amount: "-5841100", // 2691000 + 15000 + 3335100 - 200000
         currency: "ARS" as const,
       },
       {
@@ -477,12 +517,17 @@ async function main() {
       )
       .returning();
 
-    // Aprobar un plan es una sola operación: cada plan_line con sobre genera una
-    // allocation con ese plan_id. Reversible borrando las allocations del plan.
-    // Las líneas de pago (tarjeta) no generan allocation.
+    // Aprobar un plan materializa sus plan_lines como allocations con ese
+    // plan_id. Reversible borrando las allocations del plan.
+    //
+    // Dos clases de línea NO generan allocation:
+    //   · las de pago (la tarjeta): pagar el resumen no asigna propósito;
+    //   · las del nivel variable, porque el cobro todavía no entró. Quedan en
+    //     el plan como propuesta visible, y el planner las materializa cuando
+    //     el expected_inflow correspondiente pasa a `received`.
     await tx.insert(schema.allocations).values(
       planLineRows
-        .filter((l) => l.envelopeId !== null)
+        .filter((l) => l.envelopeId !== null && l.tier === "base")
         .map((l) => ({
           envelopeId: l.envelopeId!,
           date: PERIOD,
@@ -563,6 +608,18 @@ async function main() {
       `  ${r.currency}  activos ${money(r.assets).padStart(14)}  en sobres ${money(r.enveloped).padStart(14)}  pool ${money(r.pool).padStart(14)}`,
     );
   }
+  const inflows = await db.execute(dsql`
+    select s.name, i.amount::text as amount, i.currency, i.expected_date::text as expected_date, i.status
+    from expected_inflows i join income_sources s on s.id = i.income_source_id
+    order by i.expected_date
+  `);
+  console.log("\n=== Cobros esperados (no asignados) ===");
+  for (const r of inflows as unknown as Record<string, string>[]) {
+    console.log(
+      `  ${r.name.padEnd(24)} ${money(r.amount).padStart(12)} ${r.currency}  ${r.expected_date}  ${r.status}`,
+    );
+  }
+
   console.log("\n=== Totales del plan de octubre ===");
   for (const r of planTotals as unknown as Record<string, string>[]) {
     console.log(`  ${String(r.tier).padEnd(20)} ${money(r.total).padStart(12)} ARS  (${r.lines} líneas)`);
@@ -589,6 +646,13 @@ async function main() {
   expect("plan · nivel piso (ARS)", totals.base, "2691000");
   expect("plan · nivel variable (ARS)", totals.recurring_variable, "5980000");
 
+  // Lo que queda sin propósito despues de aprobar el piso: los 200.000 del
+  // resumen de la tarjeta (que no es un sobre) + los 15.000 que ya estaban en
+  // Mercado Pago. Los 5.980.000 del nivel variable no están asignados porque
+  // todavía no entraron.
+  expect("pool sin asignar post-plan (ARS)", row(pool)[0].pool, "215000");
+  expect("pool sin asignar post-plan (USD)", row(pool)[1].pool, "0");
+
   const netWorth = await db.execute(dsql`
     with bal as (
       select a.currency, a.type, sum(e.amount) as total
@@ -598,12 +662,12 @@ async function main() {
     )
     select sum(
       case when b.currency = 'USD' then b.total * ${USD_ARS}::numeric else b.total end
-      * case when b.type = 'liability' then -1 else 1 end
     )::text as ars
     from bal b
   `);
-  // §5: 8.358.100 ARS con el USD redondeado; exacto a 1.550 da 8.358.350.
-  expect("patrimonio total (ARS)", row(netWorth)[0].ars, "8358350");
+  // §5 da 8.358.100 porque no resta la deuda de la tarjeta y redondea el tramo
+  // USD. Con el pasivo de 200.000 y el dólar exacto a 1.550: 8.158.350.
+  expect("patrimonio total (ARS)", row(netWorth)[0].ars, "8158350");
 
   const invariant = await db.execute(dsql`
     select count(*)::int as unbalanced from (

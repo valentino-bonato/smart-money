@@ -34,3 +34,22 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
 - `drizzle/0001_invariant_triggers.sql` — `assert_balanced` (deferido) y
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
+
+## Convención de signos
+
+Los pasivos van **negativos** cuando se debe plata (igual que Beancount). El
+patrimonio es la suma llana de los saldos `asset` + `liability`, sin invertir
+el signo de nada.
+
+## Estado del seed (al 1-oct-2026)
+
+- La tarjeta abre con −200.000 (el resumen real de §5, que la tabla de saldos
+  de apertura de la spec no lista).
+- El plan de octubre está aprobado, pero solo las 7 líneas de sobre del **nivel
+  piso** generaron allocation. Las 3 del nivel variable quedan como propuesta:
+  los 4.780.000 de consultoría y los 1.200.000 del hito están en
+  `expected_inflows` con status `expected`. El planner las materializa cuando
+  el cobro pasa a `received`.
+- `pool_sin_asignar` = 215.000 ARS (200.000 del resumen de la tarjeta, que no
+  es un sobre, + 15.000 de Mercado Pago) y 0 USD.
+- Patrimonio: 8.158.350 ARS.
