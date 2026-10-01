@@ -454,9 +454,7 @@ async function receivedInTier(
     from entries e
     join accounts a on a.id = e.account_id
     join transactions t on t.id = e.transaction_id
-    join income_sources s
-      on s.user_id = t.user_id
-     and a.name = 'Ingresos:' || split_part(s.name, ' ', 1)
+    join income_sources s on s.account_id = a.id
     where a.type = 'income'
       and s.tier = ${tier}
       and t.user_id = ${opts.userId}

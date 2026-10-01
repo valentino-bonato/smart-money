@@ -77,6 +77,9 @@ export default async function PlanPage({
           <Link href="/sobres" className="underline opacity-70">
             Sobres
           </Link>
+          <Link href="/conciliacion" className="underline opacity-70">
+            Conciliar
+          </Link>
         </nav>
       </header>
 

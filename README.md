@@ -63,6 +63,12 @@ La sugerencia por comercio arranca vacía y aprende del uso. La moneda la define
 la categoría, y las cuentas de origen se filtran a esa moneda. El saldo del
 sobre se muestra junto al selector, que es el momento en que importa.
 
+## Conciliación
+
+`/conciliacion`: se pegan los saldos del homebanking y la app dice la diferencia
+por cuenta y qué es lo más probable que falte cargar — los gastos fijos del mes
+sin cargo y los cobros esperados cuya fecha ya pasó.
+
 ## El plan del mes
 
 `/plan` corre la cascada de tres niveles con catch-up y devuelve **la lista de

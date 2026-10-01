@@ -31,6 +31,11 @@ import {
   returnToPool,
 } from "./envelopes";
 import { payeeSuggestions, unassignedPool } from "./queries";
+import {
+  missingEntries,
+  reconcilableAccounts,
+  recordReconciliation,
+} from "./reconcile";
 import { MoneyParseError, parseAmountInput } from "../lib/money";
 import { prepareRecurringCharges } from "./recurring";
 import * as schema from "./schema";
@@ -219,6 +224,116 @@ async function main() {
     // convertir, que es exactamente la diferencia de cambio que queda en las
     // cuentas de FX.
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
+  }
+
+  /* ------------------------------------------------- conciliación --- */
+  // La línea del checklist de §8: al cierre los saldos de la app tienen que
+  // coincidir al peso con el homebanking.
+  console.log("\n### Conciliación");
+  {
+    const accounts = await reconcilableAccounts(db, { userId: user.id });
+    const byName = (name: string) => {
+      const a = accounts.find((x) => x.name === name);
+      if (!a) throw new Error(`Cuenta no conciliable: ${name}`);
+      return a;
+    };
+
+    // Las cuentas de sistema no se pegan de ningún homebanking.
+    check(
+      "no ofrece conciliar cuentas de sistema",
+      String(accounts.filter((a) => a.name.startsWith("Equity:")).length),
+      "0",
+    );
+    // 6 de activo (incluye "Me deben", que no tiene homebanking pero se
+    // concilia a mano igual) + las 2 tarjetas.
+    check("cuentas conciliables", String(accounts.length), "8");
+
+    // Caso 1 · pegar el saldo exacto: tiene que cerrar.
+    const exact = await recordReconciliation(db, {
+      userId: user.id,
+      date: DATE,
+      balances: [
+        {
+          accountId: byName("BBVA caja de ahorro").accountId,
+          statementBalance: byName("BBVA caja de ahorro").computedBalance,
+        },
+      ],
+    });
+    check("saldo exacto · diferencia", exact[0].difference, "0");
+    check("saldo exacto · cierra", exact[0].matched ? "1" : "0", "1");
+
+    // Caso 2 · el banco tiene 12.000 más: falta cargar un ingreso.
+    const more = await recordReconciliation(db, {
+      userId: user.id,
+      date: DATE,
+      balances: [
+        {
+          accountId: byName("Mercado Pago").accountId,
+          statementBalance: sumAmounts([
+            byName("Mercado Pago").computedBalance,
+            "12000",
+          ]),
+        },
+      ],
+    });
+    check("banco con más · diferencia", more[0].difference, "12000");
+    check("banco con más · no cierra", more[0].matched ? "1" : "0", "0");
+
+    // Caso 3 · una tarjeta, con el saldo negativo que es como se debe.
+    const card = await recordReconciliation(db, {
+      userId: user.id,
+      date: DATE,
+      balances: [
+        {
+          accountId: byName("Tarjeta de crédito BBVA — USD").accountId,
+          statementBalance: "-221",
+        },
+      ],
+    });
+    check("tarjeta USD · cierra", card[0].matched ? "1" : "0", "1");
+
+    // Qué falta cargar: los gastos fijos del mes sin cargo y los cobros
+    // esperados cuya fecha ya pasó.
+    const missing = await missingEntries(db, {
+      userId: user.id,
+      period: "2026-10-01",
+      today: "2026-10-31",
+    });
+    const names = missing.map((m) => m.name).sort();
+    // Las 3 suscripciones vinieron con el resumen; falta el inglés.
+    check(
+      "falta cargar · el inglés",
+      String(names.filter((n) => n === "Clases de inglés").length),
+      "1",
+    );
+    check(
+      "falta cargar · no repite las suscripciones ya cargadas",
+      String(names.filter((n) => n === "Claude").length),
+      "0",
+    );
+    // Los dos cobros esperados al 31-oct ya vencieron.
+    check(
+      "falta cargar · los 2 cobros esperados",
+      String(missing.filter((m) => m.kind === "inflow").length),
+      "2",
+    );
+    for (const m of missing) {
+      console.log(
+        `    ${m.kind === "recurring" ? "gasto fijo" : "cobro    "}  ${m.name.padEnd(22)} ${money(m.amount).padStart(11)} ${m.currency}`,
+      );
+    }
+
+    // Un cobro con fecha futura no se sugiere todavía.
+    const early = await missingEntries(db, {
+      userId: user.id,
+      period: "2026-10-01",
+      today: "2026-10-01",
+    });
+    check(
+      "no sugiere un cobro que todavía no venció",
+      String(early.filter((m) => m.kind === "inflow").length),
+      "0",
+    );
   }
 
   /* --------------------------------------------- libro de sobres --- */
@@ -562,6 +677,7 @@ async function main() {
 
   /* --------------------------------------------------------------- limpieza */
   console.log("\n### Limpieza");
+  await db.execute(dsql`delete from reconciliations`);
   for (const id of allocs) {
     await db.delete(schema.allocations).where(eq(schema.allocations.id, id));
   }

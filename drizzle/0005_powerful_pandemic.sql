@@ -1,0 +1,2 @@
+ALTER TABLE "income_sources" ADD COLUMN "account_id" uuid;--> statement-breakpoint
+ALTER TABLE "income_sources" ADD CONSTRAINT "income_sources_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE set null ON UPDATE no action;

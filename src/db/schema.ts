@@ -270,6 +270,13 @@ export const incomeSources = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     tier: incomeTier("tier").notNull(),
+    // La cuenta de ingreso que representa esta fuente. Sin esto el planner
+    // tiene que adivinar el vínculo por nombre, y un renombre lo haría leer
+    // "no entró nada" en silencio — el peor modo de falla posible en la
+    // cascada, porque no asignar se ve igual que no tener plata.
+    accountId: uuid("account_id").references(() => accounts.id, {
+      onDelete: "set null",
+    }),
     expectedAmount: numeric("expected_amount", { precision: 20, scale: 4 }),
     currency: currency("currency").notNull(),
     dayOfMonth: integer("day_of_month"),
@@ -490,6 +497,10 @@ export const incomeSourcesRelations = relations(
   incomeSources,
   ({ one, many }) => ({
     user: one(users, { fields: [incomeSources.userId], references: [users.id] }),
+    account: one(accounts, {
+      fields: [incomeSources.accountId],
+      references: [accounts.id],
+    }),
     expectedInflows: many(expectedInflows),
   }),
 );

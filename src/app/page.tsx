@@ -89,6 +89,9 @@ export default async function Page() {
           <Link href="/plan" className="underline opacity-70">
             Plan
           </Link>
+          <Link href="/conciliacion" className="underline opacity-70">
+            Conciliar
+          </Link>
         </nav>
       </header>
 

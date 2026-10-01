@@ -410,6 +410,7 @@ async function main() {
         userId: user.id,
         name: "Sueldo",
         tier: "base",
+        accountId: acct("Ingresos:Sueldo").id,
         expectedAmount: "2717000",
         currency: "ARS",
         dayOfMonth: 1,
@@ -418,6 +419,7 @@ async function main() {
         userId: user.id,
         name: "Consultoría por hora",
         tier: "recurring_variable",
+        accountId: acct("Ingresos:Consultoría").id,
         expectedAmount: "1500000", // promedio del nivel, no del total
         currency: "ARS",
       },
@@ -425,6 +427,7 @@ async function main() {
         userId: user.id,
         name: "Desarrollos",
         tier: "milestone",
+        accountId: acct("Ingresos:Desarrollos").id,
         // Por hitos: mitad al inicio, mitad al cierre. Sin monto esperado fijo.
         expectedAmount: null,
         currency: "ARS",

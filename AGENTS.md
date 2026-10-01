@@ -34,6 +34,13 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
 - `drizzle/0001_invariant_triggers.sql` — `assert_balanced` (deferido) y
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
+- `BACKLOG.md` — lo pendiente, con el motivo de cada cosa
+
+`income_sources.account_id` vincula cada fuente con su cuenta de ingreso. Es por
+id y no por nombre: el planner lee de ahí lo cobrado por nivel, y un match por
+nombre devolvería 0 si la fuente se renombra — o sea, "no entró nada", que es el
+peor modo de falla posible en la cascada porque no asignar se ve igual que no
+tener plata.
 
 ## Gastos fijos: no hay cron
 
@@ -143,6 +150,28 @@ asignar, y mover plata de propósito.
   más bajo del real.
 - Un archivo `"use server"` solo puede exportar funciones async. La constante
   `POOL` vive en `pool.ts` por eso.
+
+## Conciliación
+
+`src/db/reconcile.ts` + `src/app/conciliacion/`. Es el chequeo de §8 que decide
+si se puede confiar en el resto: si los saldos no cierran al peso con el
+homebanking, el planner está comiendo de un historial incompleto.
+
+Lo que la hace útil no es la resta — eso es trivial — sino `missingEntries()`:
+qué es lo más probable que falte. No intenta adivinar gastos sueltos; apunta a
+lo que la app **ya sabe** que tiene que pasar y todavía no vio:
+
+- gastos fijos del mes sin cargo generado (vía `transactions.recurring_expense_id`);
+- cobros esperados cuya `expected_date` ya pasó.
+
+`difference = statement − computed`. Positiva = el banco tiene más, así que
+falta cargar un ingreso o hay un gasto cargado que no existió. La resta se hace
+en la base con `numeric`. Las cuentas que se dejan en blanco **no** se
+concilian: guardar un cero por una cuenta que no se miró sería mentira.
+
+El cero sí es un saldo válido acá, a diferencia de en la carga — `parseAmountInput`
+lo rechaza a propósito (un gasto de 0 no existe), así que la acción lo acepta
+explícito antes de parsear.
 
 ## Pantalla de carga
 
