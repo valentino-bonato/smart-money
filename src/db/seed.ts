@@ -628,6 +628,44 @@ async function main() {
       )
       .returning();
 
+    // ------------------------------------------------ gastos recurrentes
+    // Las tres suscripciones, con su precio de lista en USD.
+    //
+    // `day_of_month = 1` no es el día en que cobra cada una: eso no se sigue.
+    // Los cargos aparecen cuando cierra el resumen y el resumen se paga el 1,
+    // junto con el sueldo — que es además la primera línea de la cascada del
+    // piso en §4. Por eso el generador no crea los cargos por fecha: prepara
+    // el resumen del mes con estos precios, y los montos se corrigen contra el
+    // resumen real (§8: cargar estimado y corregir al cerrar).
+    const recurringRows = await tx
+      .insert(schema.recurringExpenses)
+      .values(
+        (
+          [
+            ["Claude", "100"],
+            ["Notion", "12"],
+            ["YouTube Premium", "1.82"],
+          ] as const
+        ).map(([name, amount]) => ({
+          userId: user.id,
+          name,
+          accountId: acct("Tarjeta de crédito BBVA — USD").id,
+          expenseAccountId: acct("Gastos:Suscripciones").id,
+          envelopeId: env("Suscripciones").id,
+          amount,
+          currency: "USD" as const,
+          dayOfMonth: 1,
+          active: true,
+        })),
+      )
+      .returning();
+
+    const recurring = (name: string) => {
+      const row = recurringRows.find((r) => r.name === name);
+      if (!row) throw new Error(`Gasto recurrente inexistente: ${name}`);
+      return row;
+    };
+
     // ------------------------------------- resumen en dólares de octubre
     // Los cuatro consumos del resumen que hay que pagar ahora. Van como
     // transacciones reales y no como saldo de apertura, porque sí se sabe de
@@ -645,6 +683,7 @@ async function main() {
         envelope: "Viaje",
         // El hostel no es una suscripción: es el viaje, pagado por adelantado.
         description: "Hostel de Amsterdam",
+        recurring: null,
       },
       {
         amount: "100",
@@ -652,6 +691,7 @@ async function main() {
         expense: "Gastos:Suscripciones",
         envelope: "Suscripciones",
         description: null,
+        recurring: "Claude",
       },
       {
         amount: "42",
@@ -661,6 +701,7 @@ async function main() {
         // 42 contra 12 de precio de lista: el caso de §8 de cargar estimado y
         // corregir con el resumen. Los 30 de más dejan el sobre corto.
         description: "Atípico — el precio normal son 12 USD/mes",
+        recurring: "Notion",
       },
       {
         amount: "2",
@@ -668,6 +709,7 @@ async function main() {
         expense: "Gastos:Suscripciones",
         envelope: "Suscripciones",
         description: null,
+        recurring: "YouTube Premium",
       },
     ];
 
@@ -682,6 +724,11 @@ async function main() {
         envelopeId: env(line.envelope).id,
         payee: line.payee,
         description: line.description,
+        // Linkear el cargo a su suscripción hace que preparar el resumen de
+        // octubre sea idempotente: el índice único por mes ya lo tiene.
+        recurringExpenseId: line.recurring
+          ? recurring(line.recurring).id
+          : null,
       });
     }
 

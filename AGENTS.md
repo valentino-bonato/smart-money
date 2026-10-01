@@ -35,6 +35,21 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
 
+## Suscripciones: no hay cron
+
+`prepareRecurringCharges()` en `recurring.ts` **no** se dispara por fecha. Los
+cargos aparecen cuando cierra el resumen y el resumen se paga el 1 junto con el
+sueldo; el día en que cobra cada suscripción no se sigue y no cambia nada. Así
+que la operación es "preparar el resumen de este mes": deja los tres cargos con
+su precio de lista para corregirlos después contra el resumen real.
+
+`day_of_month = 1` en las tres significa eso — el día en que se paga el
+resumen —, no el día de cada cobro.
+
+Es idempotente por el índice único parcial `transactions_recurring_month_idx`:
+un asiento por (gasto recurrente, mes). No consultar antes de escribir; se
+intenta el insert y se trata la violación de unique (23505) como "ya estaba".
+
 ## La tarjeta son dos cuentas
 
 `Tarjeta de crédito BBVA — ARS` y `— USD`, por la misma razón que Cocos: el

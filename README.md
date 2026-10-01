@@ -55,6 +55,14 @@ La compra de dólares pasa por las cuentas de FX: la pata ARS cierra contra
 `Equity:FX:ARS` y la pata USD contra `Equity:FX:USD`. Cruzar monedas en un mismo
 asiento sin esas patas tira un error explícito antes de tocar la base.
 
+## Suscripciones
+
+Las tres (Claude 100, Notion 12, YouTube 1,82 USD) se facturan en dólares
+contra la tarjeta en USD. No se generan por fecha: `prepareRecurringCharges()`
+prepara el resumen del mes con el precio de lista, y los montos se corrigen
+contra el resumen real — el resumen de octubre trajo Notion a 42 en vez de 12.
+Correrlo dos veces no duplica nada.
+
 ## Reglas no negociables del código
 
 1. **La plata es `string`, nunca `number`.** `numeric` mapea a `string` en

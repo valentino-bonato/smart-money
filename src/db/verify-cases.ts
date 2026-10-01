@@ -25,6 +25,7 @@ import {
   recordTransfer,
   sumAmounts,
 } from "./ledger";
+import { prepareRecurringCharges } from "./recurring";
 import * as schema from "./schema";
 
 async function main() {
@@ -197,6 +198,76 @@ async function main() {
     // convertir, que es exactamente la diferencia de cambio que queda en las
     // cuentas de FX.
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
+  }
+
+  /* ------------------------------------------------ gastos recurrentes --- */
+  console.log("\n### Suscripciones · preparar el resumen del mes");
+  {
+    // Octubre ya tiene los tres cargos cargados por el seed, con el monto real
+    // del resumen. Preparar el mes de nuevo no tiene que duplicar nada.
+    const again = await prepareRecurringCharges(db, {
+      userId: user.id,
+      period: "2026-10-01",
+    });
+    check(
+      "octubre · ya estaban los 3",
+      String(again.filter((c) => c.alreadyThere).length),
+      "3",
+    );
+    check(
+      "octubre · creados de nuevo",
+      String(again.filter((c) => !c.alreadyThere).length),
+      "0",
+    );
+    check(
+      "deuda de octubre sin cambios",
+      await balance("Tarjeta de crédito BBVA — USD"),
+      "-221",
+    );
+
+    // Noviembre no tiene nada: se crean los tres con el precio de lista.
+    const nov = await prepareRecurringCharges(db, {
+      userId: user.id,
+      period: "2026-11-01",
+    });
+    for (const c of nov) {
+      console.log(
+        `    ${c.name.padEnd(18)} ${c.date}  ${money(c.amount).padStart(7)} ${c.currency}`,
+      );
+      if (c.transactionId) created.push(c.transactionId);
+    }
+    check(
+      "noviembre · creados",
+      String(nov.filter((c) => !c.alreadyThere).length),
+      "3",
+    );
+    // 100 + 12 + 1,82 de precio de lista, no los 144 del resumen de octubre.
+    check(
+      "noviembre · total a precio de lista",
+      sumAmounts(nov.map((c) => c.amount)),
+      "113.82",
+    );
+    check(
+      "deuda de la tarjeta USD",
+      await balance("Tarjeta de crédito BBVA — USD"),
+      "-334.82",
+    );
+
+    // Y una segunda corrida de noviembre tampoco duplica.
+    const novAgain = await prepareRecurringCharges(db, {
+      userId: user.id,
+      period: "2026-11-01",
+    });
+    check(
+      "noviembre · idempotente",
+      String(novAgain.filter((c) => c.alreadyThere).length),
+      "3",
+    );
+    check(
+      "deuda sin cambios",
+      await balance("Tarjeta de crédito BBVA — USD"),
+      "-334.82",
+    );
   }
 
   /* -------------------------------------------------- lo que debe fallar --- */
