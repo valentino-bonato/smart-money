@@ -24,6 +24,7 @@ import { recordExpense } from "./ledger";
 import {
   accountBalances,
   envelopeBalances,
+  goalProgress,
   netWorth,
   unassignedPool,
 } from "./queries";
@@ -39,7 +40,7 @@ async function main() {
   /** Dólar oficial usado en todo el plan de octubre (§5). */
   const USD_ARS = "1550";
 
-  await db.transaction(async (tx) => {
+  const planId = await db.transaction(async (tx) => {
     // ---------------------------------------------------------------- limpieza
     await tx.execute(dsql`
       truncate table
@@ -704,6 +705,8 @@ async function main() {
           note: l.ruleApplied,
         })),
     );
+
+    return plan.id;
   });
 
   /* ------------------------------------------------------------ verificación */
@@ -752,6 +755,24 @@ async function main() {
     );
   }
 
+  // El plan de octubre se excluye para ver el estado DESDE EL QUE se calculó:
+  // así es como el planner tiene que mirarlo para poder replanificar.
+  const goals = await goalProgress(db, {
+    rate: USD_ARS,
+    period: PERIOD,
+    excludePlanId: planId,
+  });
+  console.log("\n=== Metas (estado previo al plan de octubre) ===");
+  for (const g of goals) {
+    console.log(
+      `  ${g.name.padEnd(22)} ${money(g.progress).padStart(9)} / ${money(g.targetAmount)} ${g.targetCurrency}` +
+        `  falta ${money(g.remaining).padStart(9)}` +
+        `  ${g.monthsRemaining === null ? "sin fecha " : `${String(g.monthsRemaining).padStart(2)} meses`}` +
+        `  aporte ${money(g.suggestedContribution).padStart(6)}` +
+        (Number(g.spent) !== 0 ? `   (ya gastado ${money(g.spent)})` : ""),
+    );
+  }
+
   const planTotals = await db.execute(dsql`
     select tier, sum(amount)::text as total, count(*)::int as lines
     from plan_lines group by tier order by tier
@@ -791,6 +812,28 @@ async function main() {
   const totals = Object.fromEntries(row(planTotals).map((r) => [r.tier, r.total]));
   expect("plan · nivel piso (ARS)", totals.base, "2691000");
   expect("plan · nivel variable (ARS)", totals.recurring_variable, "5980000");
+
+  // El catch-up tiene que reproducir los aportes de §4 sin que nadie los
+  // escriba a mano: faltante ÷ meses restantes. Si estos tres números salen,
+  // el modelo de metas es el de la spec.
+  const goal = (name: string) => {
+    const g = goals.find((x) => x.name === name);
+    if (!g) throw new Error(`Meta inexistente: ${name}`);
+    return g;
+  };
+  expect("catch-up · viaje (USD/mes)", goal("Viaje").suggestedContribution, "824");
+  expect("catch-up · auto (USD/mes)", goal("Auto — ahorro").suggestedContribution, "863");
+  // Sin fecha: el faltante entero, que es lo que el nivel 2 completa de una.
+  expect(
+    "catch-up · fondo de emergencia (USD)",
+    goal("Fondo de emergencia").suggestedContribution,
+    "1208",
+  );
+  // El hostel ya pagado cuenta como progreso del viaje, no como retroceso: el
+  // objetivo es el costo total. Pero el sobre tiene 77 menos para gastar.
+  expect("viaje · progreso", goal("Viaje").progress, "703");
+  expect("viaje · gastado", goal("Viaje").spent, "77");
+  expect("viaje · disponible", goal("Viaje").available, "626");
 
   // El fondo de emergencia recibe lo mismo que en §5 (1.872.000 = 1.208 USD,
   // que sobre los 792 que ya tenía completa los 2.000), solo que repartido

@@ -74,10 +74,22 @@ Dos límites conocidos de las fórmulas de §6:
 
 - `unassignedPool` mira solo cuentas `asset`, así que un resumen de tarjeta
   pendiente no lo baja: el pool se ve más rico de lo que es por ese monto.
-- El saldo de un sobre meta baja cuando se gasta de él, pero `target_amount` no.
-  Con el hostel de Amsterdam ya pagado, el Viaje muestra 626 USD contra un
-  objetivo de 7.295 — y el faltante real es 77 menor. Hay que resolverlo al
-  construir el catch-up (paso 5).
+- El progreso de una meta NO es el saldo del sobre (ver abajo).
+
+## Progreso de una meta ≠ saldo del sobre
+
+Son dos números distintos y confundirlos rompe el catch-up:
+
+- **progreso** = `Σ allocations`. El `target_amount` es el costo TOTAL de la
+  meta, así que gastar del sobre en la meta misma (el hostel de Amsterdam) es la
+  meta cumpliéndose, no plata que haya que volver a juntar.
+- **available** = `progreso − gastado`. Responde "¿me queda plata del viaje?".
+
+Si el progreso restara los gastos, cada pago adelantado pediría ahorrar ese
+monto dos veces. `goalProgress()` en `queries.ts` lo implementa, y el seed
+verifica que el catch-up (faltante ÷ meses restantes) reproduzca los aportes de
+§4 — 824 USD del viaje y 863 del auto — desde los datos, sin escribirlos a mano.
+Si tocás el modelo de metas y esos dos números se mueven, rompiste algo.
 
 ## Convención de signos
 
