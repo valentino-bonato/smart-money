@@ -201,59 +201,64 @@ async function main() {
   }
 
   /* ------------------------------------------------ gastos recurrentes --- */
-  console.log("\n### Suscripciones · preparar el resumen del mes");
+  console.log("\n### Gastos recurrentes · preparar el resumen del mes");
   {
-    // Octubre ya tiene los tres cargos cargados por el seed, con el monto real
-    // del resumen. Preparar el mes de nuevo no tiene que duplicar nada.
-    const again = await prepareRecurringCharges(db, {
+    // Octubre ya trae del seed los 3 cargos de suscripciones, con el monto
+    // real del resumen. Las clases de inglés, en cambio, todavía no se
+    // pagaron: el saldo de apertura de la caja de ahorro es el sueldo sin
+    // tocar. Así que preparar octubre crea una sola cosa.
+    const oct = await prepareRecurringCharges(db, {
       userId: user.id,
       period: "2026-10-01",
     });
+    for (const c of oct) if (c.transactionId) created.push(c.transactionId);
     check(
-      "octubre · ya estaban los 3",
-      String(again.filter((c) => c.alreadyThere).length),
+      "octubre · suscripciones ya estaban",
+      String(oct.filter((c) => c.alreadyThere).length),
       "3",
     );
     check(
-      "octubre · creados de nuevo",
-      String(again.filter((c) => !c.alreadyThere).length),
-      "0",
+      "octubre · solo se crea el inglés",
+      String(oct.filter((c) => !c.alreadyThere).map((c) => c.name).length),
+      "1",
     );
     check(
-      "deuda de octubre sin cambios",
+      "octubre · deuda en dólares sin cambios",
       await balance("Tarjeta de crédito BBVA — USD"),
       "-221",
     );
+    check(
+      "octubre · sobre Inglés consumido",
+      await envelopeBalance("Inglés", "ARS"),
+      "0",
+    );
 
-    // Noviembre no tiene nada: se crean los tres con el precio de lista.
+    // Noviembre no tiene nada: se crean los cuatro con el precio de lista.
     const nov = await prepareRecurringCharges(db, {
       userId: user.id,
       period: "2026-11-01",
     });
     for (const c of nov) {
       console.log(
-        `    ${c.name.padEnd(18)} ${c.date}  ${money(c.amount).padStart(7)} ${c.currency}`,
+        `    ${c.name.padEnd(18)} ${c.date}  ${money(c.amount).padStart(9)} ${c.currency}`,
       );
       if (c.transactionId) created.push(c.transactionId);
     }
     check(
       "noviembre · creados",
       String(nov.filter((c) => !c.alreadyThere).length),
-      "3",
+      "4",
     );
+    // Por moneda: sumar ARS y USD daría un número sin significado.
+    const novBy = (currency: string) =>
+      sumAmounts(
+        nov.filter((c) => c.currency === currency).map((c) => c.amount),
+      );
     // 100 + 12 + 1,82 de precio de lista, no los 144 del resumen de octubre.
-    check(
-      "noviembre · total a precio de lista",
-      sumAmounts(nov.map((c) => c.amount)),
-      "113.82",
-    );
-    check(
-      "deuda de la tarjeta USD",
-      await balance("Tarjeta de crédito BBVA — USD"),
-      "-334.82",
-    );
+    check("noviembre · suscripciones (USD)", novBy("USD"), "113.82");
+    check("noviembre · inglés (ARS)", novBy("ARS"), "240000");
 
-    // Y una segunda corrida de noviembre tampoco duplica.
+    // Y una segunda corrida de noviembre no duplica nada.
     const novAgain = await prepareRecurringCharges(db, {
       userId: user.id,
       period: "2026-11-01",
@@ -261,10 +266,10 @@ async function main() {
     check(
       "noviembre · idempotente",
       String(novAgain.filter((c) => c.alreadyThere).length),
-      "3",
+      "4",
     );
     check(
-      "deuda sin cambios",
+      "noviembre · deuda sin cambios",
       await balance("Tarjeta de crédito BBVA — USD"),
       "-334.82",
     );
@@ -351,8 +356,10 @@ async function main() {
     sumAmounts(
       monthly.filter((r) => r.currency === currency).map((r) => r.total),
     );
-  // En ARS, solo el caso 0: los otros tres movieron plata y no son gasto.
-  check("gasto del mes en ARS", totalBy("ARS"), "25000");
+  // En ARS: el caso 0 (25.000 en el súper) más las clases de inglés que
+  // acaba de crear la prueba de recurrentes. Los tres casos raros movieron
+  // plata y no aparecen acá, que es el punto de §8.
+  check("gasto del mes en ARS", totalBy("ARS"), "265000");
   // En USD, el resumen de la tarjeta que trae el seed: 77 + 100 + 42 + 2.
   check("gasto del mes en USD", totalBy("USD"), "221");
 

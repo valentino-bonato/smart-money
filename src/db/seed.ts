@@ -4,7 +4,7 @@
  * Contenido, según la spec:
  *   · 6 cuentas de usuario + "Me deben" + 6 de gasto + 4 de ingreso
  *     + las de sistema
- *   · 10 sobres (6 de gasto + 4 de tipo meta, de los cuales 3 tienen objetivo)
+ *   · 11 sobres (7 de gasto + 4 de tipo meta, de los cuales 3 tienen objetivo)
  *   · saldos de apertura al 1-oct-2026 contra Equity:Opening
  *   · 3 fuentes de ingreso
  *   · 3 metas (objetivo, fecha y aporte mensual)
@@ -130,6 +130,7 @@ async function main() {
         // el gasto se incurre en dólares. Una cuenta = una moneda.
         ["Gastos:Suscripciones", "USD"],
         ["Gastos:Extras y regalos", "ARS"],
+        ["Gastos:Educación", "ARS"],
         // En USD: el hostel de Amsterdam se pagó con la tarjeta en dólares.
         ["Gastos:Viaje", "USD"],
       ] as const
@@ -272,12 +273,25 @@ async function main() {
           contributionAmount: "113.82",
           contributionCurrency: "USD",
         },
+        // Gasto fijo que se paga a principio de mes. Acumula por el mismo
+        // motivo que Suscripciones: si el precio sube y el aporte no, el
+        // sobre queda en negativo y se ve, en vez de resetear y esconderlo.
+        {
+          userId: user.id,
+          name: "Inglés",
+          kind: "spending",
+          rollover: "accumulate",
+          displayOrder: 6,
+          contributionRule: "fixed",
+          contributionAmount: "240000",
+          contributionCurrency: "ARS",
+        },
         {
           userId: user.id,
           name: "Puntuales del mes",
           kind: "spending",
           rollover: "reset",
-          displayOrder: 6,
+          displayOrder: 7,
           // Sin regla: los puntuales se cargan a mano mes a mes.
           contributionRule: null,
         },
@@ -287,7 +301,7 @@ async function main() {
           name: "Viaje",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 7,
+          displayOrder: 8,
           targetAmount: "7295",
           targetCurrency: "USD",
           targetDate: "2027-06-01", // fecha dura
@@ -301,7 +315,7 @@ async function main() {
           name: "Auto — ahorro",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 8,
+          displayOrder: 9,
           targetAmount: "10000",
           targetCurrency: "USD",
           targetDate: "2027-09-01", // blanda
@@ -315,7 +329,7 @@ async function main() {
           name: "Fondo de emergencia",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 9,
+          displayOrder: 10,
           targetAmount: "2000",
           targetCurrency: "USD",
           // Sin fecha: prioridad 1 del nivel 2, se completa lo antes posible.
@@ -329,7 +343,7 @@ async function main() {
           name: "CEDEARs",
           kind: "goal",
           rollover: "accumulate",
-          displayOrder: 10,
+          displayOrder: 11,
           // Sin techo: se lleva el resto de la cascada.
           contributionRule: "remainder",
         },
@@ -544,6 +558,12 @@ async function main() {
         ruleApplied: "fixed · 113,82 USD @ 1.550",
       },
       {
+        envelope: "Inglés",
+        amount: "240000",
+        tier: "base",
+        ruleApplied: "fixed · 240.000/mes",
+      },
+      {
         envelope: "Auto — corriente",
         amount: "450000",
         tier: "base",
@@ -573,20 +593,15 @@ async function main() {
         tier: "base",
         ruleApplied: "one_off · cumple de Rochi",
       },
+      // Acá el piso se termina. Con las clases de inglés adentro, el sueldo
+      // ya no alcanza para el aporte completo del viaje: entran 1.044.579 de
+      // los 1.277.000, y no sobra nada para el fondo de emergencia. Los
+      // 232.421 que faltan los pone el nivel variable.
       {
         envelope: "Viaje",
-        amount: "1277000",
+        amount: "1044579",
         tier: "base",
-        ruleApplied: "deadline · 824 USD @ 1.550",
-      },
-      // El sobrante del piso baja de 184.000 a 7.579 porque ahora el piso
-      // cubre también las suscripciones. Lo que el fondo deja de recibir acá
-      // lo recupera en el nivel 2, que es el que lo completa.
-      {
-        envelope: "Fondo de emergencia",
-        amount: "7579",
-        tier: "base",
-        ruleApplied: "remainder_of_tier · sobrante del piso",
+        ruleApplied: "deadline · parcial, el piso no cubre los 824 USD",
       },
       // --- nivel 2/3 · variable: consultoría 4.780.000 + hito 1.200.000 ---
       // §4: el nivel 3 usa la misma cascada que el nivel 2, y §5 corre una sola
@@ -594,9 +609,17 @@ async function main() {
       // tier = recurring_variable en vez de partirse por fuente.
       {
         envelope: "Fondo de emergencia",
-        amount: "1864421",
+        amount: "1872000",
         tier: "recurring_variable",
         ruleApplied: "fill_to_target · completa los 2.000 USD (incluye hito 1.200.000)",
+      },
+      // El viaje es la única meta con fecha dura, así que el faltante del
+      // piso se cubre antes que el auto y los CEDEARs.
+      {
+        envelope: "Viaje",
+        amount: "232421",
+        tier: "recurring_variable",
+        ruleApplied: "deadline · completa los 824 USD que el piso no cubrió",
       },
       {
         envelope: "Auto — ahorro",
@@ -606,7 +629,7 @@ async function main() {
       },
       {
         envelope: "CEDEARs",
-        amount: "2777579",
+        amount: "2537579",
         tier: "recurring_variable",
         ruleApplied: "remainder · sin techo",
       },
@@ -659,6 +682,24 @@ async function main() {
         })),
       )
       .returning();
+
+    // Las clases de inglés: mismo mecanismo, pero se pagan desde la caja de
+    // ahorro (donde cae el sueldo) y no con la tarjeta.
+    const englishRows = await tx
+      .insert(schema.recurringExpenses)
+      .values({
+        userId: user.id,
+        name: "Clases de inglés",
+        accountId: acct("BBVA caja de ahorro").id,
+        expenseAccountId: acct("Gastos:Educación").id,
+        envelopeId: env("Inglés").id,
+        amount: "240000",
+        currency: "ARS" as const,
+        dayOfMonth: 1,
+        active: true,
+      })
+      .returning();
+    recurringRows.push(...englishRows);
 
     const recurring = (name: string) => {
       const row = recurringRows.find((r) => r.name === name);
@@ -898,6 +939,10 @@ async function main() {
   );
   expect("plan · fondo de emergencia (ARS)", perEnvelope["Fondo de emergencia"], "1872000");
   expect("plan · suscripciones (ARS)", perEnvelope["Suscripciones"], "176421");
+  expect("plan · inglés (ARS)", perEnvelope["Inglés"], "240000");
+  // El viaje sigue recibiendo los 824 USD del mes, pero partido en dos
+  // niveles: 1.044.579 del piso y 232.421 del variable.
+  expect("plan · viaje (ARS, los dos niveles)", perEnvelope["Viaje"], "1277000");
 
   const usdCard = await db.execute<{ total: string }>(dsql`
     select sum(e.amount)::text as total from entries e

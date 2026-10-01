@@ -35,7 +35,10 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
 
-## Suscripciones: no hay cron
+## Gastos fijos: no hay cron
+
+Son cuatro: las 3 suscripciones (en USD, contra la tarjeta en dólares) y las
+clases de inglés (240.000 ARS, desde la caja de ahorro).
 
 `prepareRecurringCharges()` en `recurring.ts` **no** se dispara por fecha. Los
 cargos aparecen cuando cierra el resumen y el resumen se paga el 1 junto con el
@@ -65,9 +68,14 @@ al mismo tiempo.
 
 ## Sobres
 
-Son 10, no los 9 de la spec: se agregó **Suscripciones**, porque la cascada de
-§4 trata la tarjeta solo como un pago y dejaba ~176.000 ARS por mes de gasto
-fijo sin propósito asignado.
+Son 11, no los 9 de la spec. Se agregaron dos gastos fijos que §4 no tiene:
+
+- **Suscripciones**: la cascada trata la tarjeta solo como un pago y dejaba
+  ~176.000 ARS por mes sin propósito asignado.
+- **Inglés**: 240.000 ARS por mes que la spec no registra en ningún lado.
+
+Los dos acumulan en vez de resetear: si el precio sube y el aporte no, el sobre
+queda en negativo y se ve, en vez de resetear y esconder la deriva.
 
 El aporte tiene moneda propia (`contribution_currency`), columna que la spec no
 tiene. Hace falta porque el de Suscripciones son 113,82 **USD** aunque el sobre
@@ -114,16 +122,22 @@ el signo de nada.
 
 ## Estado del seed (al 1-oct-2026)
 
-- La tarjeta abre con −200.000 (el resumen real de §5, que la tabla de saldos
-  de apertura de la spec no lista).
-- El plan de octubre está aprobado, pero solo las 7 líneas de sobre del **nivel
-  piso** generaron allocation. Las 3 del nivel variable quedan como propuesta:
-  los 4.780.000 de consultoría y los 1.200.000 del hito están en
+- La tarjeta abre con −200.000 ARS (el resumen de §5, que la tabla de saldos de
+  apertura de la spec no lista) y −221 USD (hostel 77 + Claude 100 + Notion 42
+  + YouTube 2, cargados como transacciones con su sobre).
+- El plan de octubre está aprobado, pero solo las líneas del **nivel piso**
+  generaron allocation. Las del nivel variable quedan como propuesta: los
+  4.780.000 de consultoría y los 1.200.000 del hito están en
   `expected_inflows` con status `expected`. El planner las materializa cuando
   el cobro pasa a `received`.
-- `pool_sin_asignar` = 215.000 ARS (200.000 del resumen de la tarjeta, que no
-  es un sobre, + 15.000 de Mercado Pago) y 0 USD.
-- Patrimonio: 8.158.350 ARS.
+- **El piso ya no cubre el aporte al viaje.** Con las clases de inglés adentro,
+  los gastos fijos se comen 1.646.421 de los 2.691.000 del sueldo, así que el
+  viaje recibe 1.044.579 del piso y los 232.421 que faltan salen del nivel
+  variable. No sobra nada para el fondo de emergencia. En un mes flojo de
+  consultoría, la meta con fecha dura queda corta.
+- `pool_sin_asignar` = 215.000 ARS y 221 USD. Los dos son resúmenes a pagar que
+  ningún sobre reclama: la fórmula de §6 no mira los pasivos.
+- Patrimonio: 7.815.800 ARS.
 
 ## Escribir en el libro contable
 
