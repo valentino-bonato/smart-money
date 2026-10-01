@@ -142,18 +142,18 @@ async function main() {
   /* ---------------------------------------------------------------- caso 2 --- */
   console.log("\n### Caso 2 · pago del resumen de la tarjeta — NO es gasto");
   {
-    check("deuda antes del pago", await balance("Tarjeta de crédito BBVA"), "-200000");
+    check("deuda antes del pago", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
     const { id } = await recordCardPayment(db, {
       userId: user.id,
       date: DATE,
       amount: "200000",
       currency: "ARS",
       fromAccountId: acct("BBVA caja de ahorro"),
-      cardAccountId: acct("Tarjeta de crédito BBVA"),
+      cardAccountId: acct("Tarjeta de crédito BBVA — ARS"),
     });
     created.push(id);
     check("gasto imputado", await expenseOf(id), "0");
-    check("deuda después del pago", await balance("Tarjeta de crédito BBVA"), "0");
+    check("deuda después del pago", await balance("Tarjeta de crédito BBVA — ARS"), "0");
     check("BBVA caja de ahorro", await balance("BBVA caja de ahorro"), "2041000");
   }
 
@@ -283,7 +283,7 @@ async function main() {
   `);
   check("transacciones desbalanceadas", String(unbalanced), "0");
   check("BBVA caja de ahorro restaurado", await balance("BBVA caja de ahorro"), "2691000");
-  check("Tarjeta restaurada", await balance("Tarjeta de crédito BBVA"), "-200000");
+  check("Tarjeta restaurada", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
   check("Equity:FX:ARS restaurado", await balance("Equity:FX:ARS"), "0");
 
   console.log(failures === 0 ? "\nTodos los casos OK.\n" : `\n${failures} fallas.\n`);

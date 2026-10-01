@@ -65,10 +65,19 @@ async function main() {
         currency: "ARS" as const,
         institution: "BBVA",
       },
+      // La tarjeta son dos cuentas por la misma razón que Cocos: el resumen
+      // tiene un saldo en pesos (los gastos extras) y uno en dólares (las
+      // suscripciones), y cada uno se paga en su moneda.
       {
-        name: "Tarjeta de crédito BBVA",
+        name: "Tarjeta de crédito BBVA — ARS",
         type: "liability" as const,
         currency: "ARS" as const,
+        institution: "BBVA",
+      },
+      {
+        name: "Tarjeta de crédito BBVA — USD",
+        type: "liability" as const,
+        currency: "USD" as const,
         institution: "BBVA",
       },
       {
@@ -103,17 +112,21 @@ async function main() {
 
     // Las categorías SON las cuentas de gasto: no hay tabla de categorías
     // aparte. El sobre sigue siendo una dimensión separada.
-    const expenseAccounts = [
-      "Gastos:Comida y súper",
-      "Gastos:Salidas y amigos",
-      "Gastos:Rochi",
-      "Gastos:Auto",
-      "Gastos:Suscripciones",
-      "Gastos:Extras y regalos",
-    ].map((name) => ({
+    const expenseAccounts = (
+      [
+        ["Gastos:Comida y súper", "ARS"],
+        ["Gastos:Salidas y amigos", "ARS"],
+        ["Gastos:Rochi", "ARS"],
+        ["Gastos:Auto", "ARS"],
+        // En USD: las suscripciones se facturan y se pagan en dólares, así que
+        // el gasto se incurre en dólares. Una cuenta = una moneda.
+        ["Gastos:Suscripciones", "USD"],
+        ["Gastos:Extras y regalos", "ARS"],
+      ] as const
+    ).map(([name, currency]) => ({
       name,
       type: "expense" as const,
-      currency: "ARS" as const,
+      currency,
       institution: null,
     }));
 
@@ -412,7 +425,11 @@ async function main() {
       // La tabla de saldos de apertura de §5 no lista la tarjeta, pero §5 dice
       // que el resumen real es 200.000 y el plan reserva eso para pagarlo. Sin
       // el pasivo, el plan pagaría una deuda que no existe en la base.
-      { account: "Tarjeta de crédito BBVA", amount: "-200000", currency: "ARS" },
+      {
+        account: "Tarjeta de crédito BBVA — ARS",
+        amount: "-200000",
+        currency: "ARS",
+      },
     ] as const;
 
     await tx.insert(schema.entries).values(
@@ -502,10 +519,19 @@ async function main() {
     const lines: Line[] = [
       // --- nivel 1 · piso: sueldo 2.717.000, día 1 ---
       {
-        account: "Tarjeta de crédito BBVA",
+        account: "Tarjeta de crédito BBVA — ARS",
         amount: "200000",
         tier: "base",
-        ruleApplied: "statement · monto real del resumen",
+        ruleApplied: "statement · resumen en pesos (gastos extras)",
+      },
+      // El lado en dólares del mismo resumen. Se asigna en ARS y se convierte
+      // al comprar los dólares, igual que el viaje: el sobre tiene saldo por
+      // moneda. 113,82 USD × 1.550 = 176.421 ARS, exacto.
+      {
+        envelope: "Suscripciones",
+        amount: "176421",
+        tier: "base",
+        ruleApplied: "fixed · 113,82 USD @ 1.550",
       },
       {
         envelope: "Auto — corriente",
@@ -543,9 +569,12 @@ async function main() {
         tier: "base",
         ruleApplied: "deadline · 824 USD @ 1.550",
       },
+      // El sobrante del piso baja de 184.000 a 7.579 porque ahora el piso
+      // cubre también las suscripciones. Lo que el fondo deja de recibir acá
+      // lo recupera en el nivel 2, que es el que lo completa.
       {
         envelope: "Fondo de emergencia",
-        amount: "184000",
+        amount: "7579",
         tier: "base",
         ruleApplied: "remainder_of_tier · sobrante del piso",
       },
@@ -555,7 +584,7 @@ async function main() {
       // tier = recurring_variable en vez de partirse por fuente.
       {
         envelope: "Fondo de emergencia",
-        amount: "1688000",
+        amount: "1864421",
         tier: "recurring_variable",
         ruleApplied: "fill_to_target · completa los 2.000 USD (incluye hito 1.200.000)",
       },
@@ -567,7 +596,7 @@ async function main() {
       },
       {
         envelope: "CEDEARs",
-        amount: "2954000",
+        amount: "2777579",
         tier: "recurring_variable",
         ruleApplied: "remainder · sin techo",
       },
@@ -717,6 +746,23 @@ async function main() {
   const totals = Object.fromEntries(row(planTotals).map((r) => [r.tier, r.total]));
   expect("plan · nivel piso (ARS)", totals.base, "2691000");
   expect("plan · nivel variable (ARS)", totals.recurring_variable, "5980000");
+
+  // El fondo de emergencia recibe lo mismo que en §5 (1.872.000 = 1.208 USD,
+  // que sobre los 792 que ya tenía completa los 2.000), solo que repartido
+  // distinto entre los niveles ahora que el piso cubre las suscripciones.
+  const byEnvelope = await db.execute<{ name: string; total: string }>(dsql`
+    select e.name, sum(l.amount)::text as total
+    from plan_lines l join envelopes e on e.id = l.envelope_id
+    group by e.name
+  `);
+  const perEnvelope = Object.fromEntries(
+    (byEnvelope as unknown as { name: string; total: string }[]).map((r) => [
+      r.name,
+      r.total,
+    ]),
+  );
+  expect("plan · fondo de emergencia (ARS)", perEnvelope["Fondo de emergencia"], "1872000");
+  expect("plan · suscripciones (ARS)", perEnvelope["Suscripciones"], "176421");
 
   // Lo que queda sin propósito despues de aprobar el piso: los 200.000 del
   // resumen de la tarjeta (que no es un sobre) + los 15.000 que ya estaban en

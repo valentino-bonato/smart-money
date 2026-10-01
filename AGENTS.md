@@ -35,6 +35,19 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
 
+## La tarjeta son dos cuentas
+
+`Tarjeta de crédito BBVA — ARS` y `— USD`, por la misma razón que Cocos: el
+resumen tiene un saldo en pesos (gastos extras) y uno en dólares (las
+suscripciones), y cada uno se paga en su moneda. No hay recargo ni tipo de
+cambio de tarjeta: las suscripciones se pagan directamente con dólares, así que
+el único precio que interviene es el oficial.
+
+Por eso `Gastos:Suscripciones` es una cuenta de gasto en **USD**: el gasto se
+incurre en dólares. El sobre, en cambio, recibe pesos del piso y se convierte
+al comprar los dólares — igual que el Viaje, que tiene 703 USD y 1.277.000 ARS
+al mismo tiempo.
+
 ## Sobres
 
 Son 10, no los 9 de la spec: se agregó **Suscripciones**, porque la cascada de
