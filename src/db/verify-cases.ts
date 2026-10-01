@@ -30,7 +30,13 @@ import {
   moveBetweenEnvelopes,
   returnToPool,
 } from "./envelopes";
-import { payeeSuggestions, recentTransactions, unassignedPool } from "./queries";
+import { fxAccountFor } from "./ledger";
+import {
+  goalProgress,
+  payeeSuggestions,
+  recentTransactions,
+  unassignedPool,
+} from "./queries";
 import {
   missingEntries,
   reconcilableAccounts,
@@ -47,6 +53,8 @@ async function main() {
   const DATE = "2026-10-05";
   let failures = 0;
   const created: string[] = [];
+  /** Allocations creadas por las pruebas, para borrarlas al final. */
+  const allocs: string[] = [];
 
   const money = (v: string) =>
     Number(v).toLocaleString("es-AR", { maximumFractionDigits: 4 });
@@ -224,6 +232,79 @@ async function main() {
     // convertir, que es exactamente la diferencia de cambio que queda en las
     // cuentas de FX.
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
+  }
+
+  /* ------------------------- comprar dólares para un sobre (UI) --- */
+  // El caso que el plan de octubre pide de verdad: "Cocos fondo USD, mandar
+  // 3.326.021 → comprar USD". Mueve cuentas Y la asignación del sobre, en una
+  // sola transacción. Si solo moviera las cuentas, el sobre quedaría diciendo
+  // que tiene pesos que ya no existen.
+  console.log("\n### Comprar dólares para un sobre");
+  {
+    const arsBefore = await envelopeBalance("Viaje", "ARS");
+    const usdBefore = await envelopeBalance("Viaje", "USD");
+    const progressBefore = (
+      await goalProgress(db, { rate: "1550", period: "2026-11-01" })
+    ).find((g) => g.name === "Viaje")!.progress;
+    check("Viaje en ARS antes", arsBefore, "1044579");
+    check("Viaje en USD antes", usdBefore, "626");
+
+    const ars = "1044579";
+    const usd = "673.92";
+    // Las cuentas de FX se resuelven ANTES de abrir la transacción: leer con
+    // la conexión de afuera mientras la transacción la tiene tomada se cuelga.
+    const fxArs = await fxAccountFor(db, { userId: user.id, currency: "ARS" });
+    const fxUsd = await fxAccountFor(db, { userId: user.id, currency: "USD" });
+    const id = await db.transaction(async (tx) => {
+      const { id } = await exchangeCurrency(tx, {
+        userId: user.id,
+        date: DATE,
+        fromAccountId: acct("BBVA caja de ahorro"),
+        fromAmount: ars,
+        fromCurrency: "ARS",
+        fromFxAccountId: fxArs,
+        toAccountId: acct("Cocos Capital — fondo USD"),
+        toAmount: usd,
+        toCurrency: "USD",
+        toFxAccountId: fxUsd,
+        description: "Compra de dólares del viaje",
+      });
+      allocs.push(
+        ...(await convertEnvelopeAllocation(tx, {
+          envelopeId: env("Viaje"),
+          fromAmount: ars,
+          fromCurrency: "ARS",
+          toAmount: usd,
+          toCurrency: "USD",
+          date: DATE,
+          note: "Compra de dólares del viaje",
+        })),
+      );
+      return id;
+    });
+    created.push(id);
+
+    check("Viaje ya no tiene pesos", await envelopeBalance("Viaje", "ARS"), "0");
+    check(
+      "Viaje tiene los dólares",
+      await envelopeBalance("Viaje", "USD"),
+      sumAmounts([usdBefore, usd]),
+    );
+    check("gasto imputado", await expenseOf(id), "0");
+    // Cambiar de moneda no es ahorrar más: el progreso tiene que quedar donde
+    // estaba. Se mueve por centésimas y eso es correcto — antes los pesos se
+    // valuaban al oficial y ahora son dólares de verdad, al tipo que se
+    // consiguió. La diferencia es el redondeo del cambio, no un error.
+    const progressAfter = (
+      await goalProgress(db, { rate: "1550", period: "2026-11-01" })
+    ).find((g) => g.name === "Viaje")!.progress;
+    const drift = Math.abs(Number(progressAfter) - Number(progressBefore));
+    const driftOk = drift < 0.01;
+    if (!driftOk) failures++;
+    console.log(
+      `  ${driftOk ? "✓" : "✗"} el progreso de la meta no se movió: ` +
+        `${money(progressBefore)} → ${money(progressAfter)} (${drift.toFixed(4)} USD de redondeo)`,
+    );
   }
 
   /* ----------------------------------- últimos movimientos (UI) --- */
@@ -404,7 +485,6 @@ async function main() {
   // allocations es un libro separado del contable: mover propósito no mueve
   // plata de ninguna cuenta.
   console.log("\n### Libro de sobres");
-  const allocs: string[] = [];
   {
     const bbvaBefore = await balance("BBVA caja de ahorro");
     const poolBeforeAll = await unassignedPool(db);

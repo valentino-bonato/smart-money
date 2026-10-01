@@ -414,3 +414,29 @@ export async function exchangeCurrency(
     ],
   });
 }
+
+/**
+ * La cuenta de FX de una moneda. Son de sistema: el usuario nunca las elige,
+ * las pone la app sola en toda conversión.
+ */
+export async function fxAccountFor(
+  exec: Executor,
+  opts: { userId: string; currency: Currency },
+): Promise<string> {
+  const [row] = await exec
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(
+      and(
+        eq(schema.accounts.userId, opts.userId),
+        eq(schema.accounts.isSystem, true),
+        eq(schema.accounts.name, `Equity:FX:${opts.currency}`),
+      ),
+    );
+  if (!row) {
+    throw new Error(
+      `Falta la cuenta Equity:FX:${opts.currency}. Correr \`npm run db:seed\`.`,
+    );
+  }
+  return row.id;
+}

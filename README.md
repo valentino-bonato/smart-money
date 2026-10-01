@@ -63,6 +63,13 @@ La sugerencia por comercio arranca vacía y aprende del uso. La moneda la define
 la categoría, y las cuentas de origen se filtran a esa moneda. El saldo del
 sobre se muestra junto al selector, que es el momento en que importa.
 
+## Mover plata
+
+`/mover`: pasar plata a Mercado Pago para gastar después, pagar el resumen de la
+tarjeta y comprar dólares. Ninguno es un gasto y ninguno toca un sobre — la
+plata cambia de cuenta, no de propósito. La excepción es comprar dólares para un
+sobre concreto, que además pasa su asignación a la nueva moneda.
+
 ## Conciliación
 
 `/conciliacion`: se pegan los saldos del homebanking y la app dice la diferencia

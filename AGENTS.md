@@ -151,6 +151,24 @@ asignar, y mover plata de propósito.
 - Un archivo `"use server"` solo puede exportar funciones async. La constante
   `POOL` vive en `pool.ts` por eso.
 
+## Mover plata
+
+`src/app/mover/` — pasar plata a Mercado Pago, pagar el resumen y comprar
+dólares. Son los tres casos de §8 que **no son gastos** y que rompen una app de
+lista de movimientos. Por dentro son el mismo mecanismo; la diferencia la hace
+la moneda: igual → `recordTransfer`, distinta → `exchangeCurrency`, que mete
+sola las partidas de FX.
+
+Comprar dólares para un sobre además convierte su asignación
+(`convertEnvelopeAllocation`) en la misma transacción. Sin eso el sobre queda
+diciendo que tiene pesos que ya no existen. El progreso de la meta no cambia más
+allá del redondeo del cambio: pasar de moneda no es ahorrar más.
+
+**Las cuentas de FX se resuelven ANTES de abrir la transacción.** Leer con la
+conexión de afuera mientras la transacción la tiene tomada cuelga el proceso si
+el pool está en una sola conexión — y en cualquier caso lee de afuera. Es el
+mismo cuidado que vale para cualquier lectura dentro de un `db.transaction`.
+
 ## Conciliación
 
 `src/db/reconcile.ts` + `src/app/conciliacion/`. Es el chequeo de §8 que decide

@@ -65,6 +65,9 @@ export default async function SobresPage() {
           <Link href="/plan" className="underline opacity-70">
             Plan
           </Link>
+          <Link href="/mover" className="underline opacity-70">
+            Mover
+          </Link>
           <Link href="/conciliacion" className="underline opacity-70">
             Conciliar
           </Link>

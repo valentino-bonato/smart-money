@@ -45,6 +45,9 @@ export default async function ConciliacionPage() {
           <Link href="/plan" className="underline opacity-70">
             Plan
           </Link>
+          <Link href="/mover" className="underline opacity-70">
+            Mover
+          </Link>
         </nav>
       </header>
 
