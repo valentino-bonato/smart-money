@@ -401,3 +401,49 @@ export async function recentTransactions(
   `);
   return rows as unknown as RecentTransaction[];
 }
+
+/**
+ * El precio para valuar en la vista: último USD/ARS conocido <= fecha.
+ *
+ * Vive acá y no en `ledger.rateAt` porque son dos usos distintos: ahí es para
+ * registrar una operación de cambio, acá es solo para mostrar. Nunca se guarda
+ * un saldo convertido.
+ */
+export async function rateForView(
+  exec: Executor,
+  opts: { date: string; source?: string },
+): Promise<string> {
+  const rows = await exec.execute<{ rate: string }>(sql`
+    select rate::text as rate from prices
+    where base = 'USD' and quote = 'ARS' and date <= ${opts.date}::date
+      ${opts.source ? sql`and source = ${opts.source}` : sql``}
+    order by date desc
+    limit 1
+  `);
+  const row = (rows as unknown as { rate: string }[])[0];
+  if (!row) throw new Error(`Sin precio USD/ARS al ${opts.date}`);
+  return row.rate;
+}
+
+/**
+ * El próximo mes a planificar: el primero sin plan aprobado.
+ *
+ * Importa para el catch-up. Si octubre ya está aprobado y se calcula el aporte
+ * "desde octubre", el mes se cuenta como pendiente mientras su asignación ya
+ * está sumada al progreso, y el aporte sugerido sale más bajo de lo que es.
+ */
+export async function nextPlanningPeriod(
+  exec: Executor,
+  opts: { userId: string; today: string },
+): Promise<string> {
+  const rows = await exec.execute<{ period: string }>(sql`
+    select coalesce(
+      (select (max(period) + interval '1 month')::date
+         from plans
+        where user_id = ${opts.userId} and status = 'approved'
+          and period >= date_trunc('month', ${opts.today}::date)::date),
+      date_trunc('month', ${opts.today}::date)::date
+    )::text as period
+  `);
+  return (rows as unknown as { period: string }[])[0].period;
+}

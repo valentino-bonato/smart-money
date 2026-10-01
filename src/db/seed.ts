@@ -26,6 +26,7 @@ import {
   envelopeBalances,
   goalProgress,
   netWorth,
+  nextPlanningPeriod,
   unassignedPool,
 } from "./queries";
 import * as schema from "./schema";
@@ -37,10 +38,18 @@ async function main() {
 
   const OPENING = "2026-10-01";
   const PERIOD = "2026-10-01";
+  /**
+   * Las allocations de apertura se fechan al cierre de septiembre, no al 1-oct.
+   * Los saldos de cuenta sí son al 1-oct — es la fecha del saldo —, pero el
+   * propósito ya estaba asignado ANTES de que empezara octubre. Si van al 1-oct,
+   * los 703 USD del viaje aparecen como "asignado este mes" y cualquier cuenta
+   * por período los cuenta dos veces.
+   */
+  const CARRY_IN = "2026-09-30";
   /** Dólar oficial usado en todo el plan de octubre (§5). */
   const USD_ARS = "1550";
 
-  const planId = await db.transaction(async (tx) => {
+  const { planId, userId } = await db.transaction(async (tx) => {
     // ---------------------------------------------------------------- limpieza
     await tx.execute(dsql`
       truncate table
@@ -488,21 +497,21 @@ async function main() {
     await tx.insert(schema.allocations).values([
       {
         envelopeId: env("Viaje").id,
-        date: OPENING,
+        date: CARRY_IN,
         amount: "703",
         currency: "USD",
         note: "Saldo de apertura — en el fondo USD de Cocos",
       },
       {
         envelopeId: env("Fondo de emergencia").id,
-        date: OPENING,
+        date: CARRY_IN,
         amount: "792",
         currency: "USD",
         note: "Saldo de apertura — en el fondo USD de Cocos",
       },
       {
         envelopeId: env("Auto — ahorro").id,
-        date: OPENING,
+        date: CARRY_IN,
         amount: "790000",
         currency: "ARS",
         // §8: plata de una meta a ~11 meses en renta variable. Decisión
@@ -511,7 +520,7 @@ async function main() {
       },
       {
         envelopeId: env("CEDEARs").id,
-        date: OPENING,
+        date: CARRY_IN,
         amount: "2545100",
         currency: "ARS",
         note: "Saldo de apertura",
@@ -794,7 +803,7 @@ async function main() {
         })),
     );
 
-    return plan.id;
+    return { planId: plan.id, userId: user.id };
   });
 
   /* ------------------------------------------------------------ verificación */
@@ -922,6 +931,26 @@ async function main() {
   expect("viaje · progreso", goal("Viaje").progress, "703");
   expect("viaje · gastado", goal("Viaje").spent, "77");
   expect("viaje · disponible", goal("Viaje").available, "626");
+
+  // Con octubre aprobado, el próximo mes a planificar es noviembre. Y desde
+  // noviembre el aporte del viaje sube de 824 a 845: el piso de octubre solo
+  // cubrió 673,92 de los 824, y los 232.421 del nivel variable todavía no
+  // entraron. Cuando entren, vuelve a 824. Esto es el catch-up funcionando.
+  const planning = await nextPlanningPeriod(db, { userId, today: PERIOD });
+  expect(
+    "próximo mes a planificar",
+    planning === "2026-11-01" ? "1" : "0",
+    "1",
+  );
+  const fromNov = await goalProgress(db, { rate: USD_ARS, period: planning });
+  const nov = (name: string) => {
+    const g = fromNov.find((x) => x.name === name);
+    if (!g) throw new Error(`Meta inexistente: ${name}`);
+    return g;
+  };
+  expect("catch-up desde nov · viaje (USD/mes)", nov("Viaje").suggestedContribution, "845");
+  // El auto sube más porque su aporte de octubre es entero del nivel variable.
+  expect("catch-up desde nov · auto (USD/mes)", nov("Auto — ahorro").suggestedContribution, "949");
 
   // El fondo de emergencia recibe lo mismo que en §5 (1.872.000 = 1.208 USD,
   // que sobre los 792 que ya tenía completa los 2.000), solo que repartido

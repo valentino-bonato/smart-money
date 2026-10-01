@@ -62,6 +62,12 @@ La sugerencia por comercio arranca vacía y aprende del uso. La moneda la define
 la categoría, y las cuentas de origen se filtran a esa moneda. El saldo del
 sobre se muestra junto al selector, que es el momento en que importa.
 
+## Pantalla de sobres
+
+`/sobres`: saldo por sobre y por moneda, progreso de las metas con su aporte
+mensual, el pool sin asignar, y mover plata de propósito. Mover propósito no
+mueve plata de ninguna cuenta: `allocations` es un libro separado del contable.
+
 ## Suscripciones
 
 Las tres (Claude 100, Notion 12, YouTube 1,82 USD) se facturan en dólares

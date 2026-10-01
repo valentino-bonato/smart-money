@@ -1,4 +1,5 @@
 import { asc, eq, inArray, isNull, and } from "drizzle-orm";
+import Link from "next/link";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import {
@@ -81,7 +82,9 @@ export default async function Page() {
     <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
       <header className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Cargar gasto</h1>
-        <span className="text-xs opacity-50">smart money</span>
+        <Link href="/sobres" className="text-sm underline opacity-70">
+          Sobres
+        </Link>
       </header>
 
       <QuickEntry

@@ -82,6 +82,26 @@ tiene. Hace falta porque el de Suscripciones son 113,82 **USD** aunque el sobre
 se consuma en ARS: no se puede inferir de `target_currency`, que solo existe en
 las metas.
 
+## Pantalla de sobres
+
+`src/app/sobres/` — saldo por sobre y moneda, progreso de metas, pool sin
+asignar, y mover plata de propósito.
+
+- Las operaciones del libro de sobres están en `src/db/envelopes.ts` y **no**
+  pasan por `ledger.ts`: `allocations` es un libro separado y una asignación no
+  tiene contrapartida, así que el invariante de partida doble no aplica.
+  Asignar del pool es una fila; devolver, una negativa; mover entre sobres, dos;
+  pasar de moneda, dos en el mismo sobre.
+- `convertEnvelopeAllocation` existe porque comprar dólares mueve las cuentas
+  pero no las asignaciones. Si no se convierte también la asignación, el sobre
+  dice tener pesos que ya no existen.
+- El aporte sugerido de las metas se calcula desde `nextPlanningPeriod` (el
+  primer mes sin plan aprobado), **no** desde el mes actual. Contar el mes en
+  curso como pendiente mientras su asignación ya suma al progreso da un aporte
+  más bajo del real.
+- Un archivo `"use server"` solo puede exportar funciones async. La constante
+  `POOL` vive en `pool.ts` por eso.
+
 ## Pantalla de carga
 
 `src/app/page.tsx` (server component) + `quick-entry.tsx` (client) +
@@ -152,6 +172,10 @@ el signo de nada.
 
 ## Estado del seed (al 1-oct-2026)
 
+- Las allocations de apertura se fechan al **30-sep**, no al 1-oct: los saldos
+  de cuenta son al 1-oct, pero el propósito ya estaba asignado antes de que
+  empezara el mes. Si van al 1-oct, los 703 USD del viaje aparecen como
+  "asignado este mes" y cualquier cuenta por período los cuenta dos veces.
 - La tarjeta abre con −200.000 ARS (el resumen de §5, que la tabla de saldos de
   apertura de la spec no lista) y −221 USD (hostel 77 + Claude 100 + Notion 42
   + YouTube 2, cargados como transacciones con su sobre).

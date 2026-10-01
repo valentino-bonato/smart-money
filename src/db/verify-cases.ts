@@ -25,7 +25,12 @@ import {
   recordTransfer,
   sumAmounts,
 } from "./ledger";
-import { payeeSuggestions } from "./queries";
+import {
+  convertEnvelopeAllocation,
+  moveBetweenEnvelopes,
+  returnToPool,
+} from "./envelopes";
+import { payeeSuggestions, unassignedPool } from "./queries";
 import { MoneyParseError, parseAmountInput } from "../lib/money";
 import { prepareRecurringCharges } from "./recurring";
 import * as schema from "./schema";
@@ -72,6 +77,20 @@ async function main() {
       )::text as total
     `);
     return row.total;
+  }
+
+  async function mustFail(label: string, fn: () => Promise<unknown>) {
+    try {
+      await fn();
+      failures++;
+      console.log(`  ✗ ${label}: NO falló, y debía fallar`);
+    } catch (err) {
+      // El mensaje útil de un error de trigger viene en `cause`, no en el
+      // "Failed query" que envuelve postgres-js.
+      const e = err as Error & { cause?: Error };
+      const msg = (e.cause?.message ?? e.message).split("\n")[0];
+      console.log(`  ✓ ${label}: ${msg.slice(0, 95)}`);
+    }
   }
 
   /** Gasto imputado a cuentas `expense` dentro de una transacción. */
@@ -200,6 +219,102 @@ async function main() {
     // convertir, que es exactamente la diferencia de cambio que queda en las
     // cuentas de FX.
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
+  }
+
+  /* --------------------------------------------- libro de sobres --- */
+  // allocations es un libro separado del contable: mover propósito no mueve
+  // plata de ninguna cuenta.
+  console.log("\n### Libro de sobres");
+  const allocs: string[] = [];
+  {
+    const bbvaBefore = await balance("BBVA caja de ahorro");
+    const poolBeforeAll = await unassignedPool(db);
+
+    // El caso real: el Notion de 42 dejó Suscripciones en -144 USD contra
+    // 113,82 asignados. Primero se pasan a dólares los pesos del sobre, y
+    // después se cubren los 30,18 que faltan desde Puntuales del mes.
+    check("Suscripciones USD antes", await envelopeBalance("Suscripciones", "USD"), "-144");
+    check("Suscripciones ARS antes", await envelopeBalance("Suscripciones", "ARS"), "176421");
+
+    allocs.push(
+      ...(await convertEnvelopeAllocation(db, {
+        envelopeId: env("Suscripciones"),
+        fromAmount: "176421",
+        fromCurrency: "ARS",
+        toAmount: "113.82",
+        toCurrency: "USD",
+        date: DATE,
+        note: "Compra de dólares para el resumen",
+      })),
+    );
+    check("Suscripciones ARS después de pasar a USD", await envelopeBalance("Suscripciones", "ARS"), "0");
+    check("Suscripciones USD después de pasar a USD", await envelopeBalance("Suscripciones", "USD"), "-30.18");
+
+    // Cubrir el faltante desde otro sobre: dos filas.
+    allocs.push(
+      ...(await moveBetweenEnvelopes(db, {
+        fromEnvelopeId: env("Puntuales del mes"),
+        toEnvelopeId: env("Suscripciones"),
+        amount: "30.18",
+        currency: "USD",
+        date: DATE,
+        note: "Cubro el Notion atípico",
+      })),
+    );
+    check("Suscripciones queda en cero", await envelopeBalance("Suscripciones", "USD"), "0");
+    check("Puntuales queda en -30,18 USD", await envelopeBalance("Puntuales del mes", "USD"), "-30.18");
+    // Y sus pesos no se tocaron: el sobre tiene saldo POR moneda.
+    check("Puntuales conserva sus pesos", await envelopeBalance("Puntuales del mes", "ARS"), "200000");
+
+    // Nada de esto movió una sola cuenta.
+    check("ninguna cuenta se movió", await balance("BBVA caja de ahorro"), bbvaBefore);
+
+    // Pasar el sobre a dólares libera sus pesos: el pool en ARS sube por los
+    // 176.421 que Suscripciones dejó de reclamar. El pool en USD baja por los
+    // 113,82 que ahora reclama. Las dos mitades de la misma operación.
+    check(
+      "el pool en ARS subió por la conversión",
+      sumAmounts([(await unassignedPool(db))[0].pool, "-176421"]),
+      poolBeforeAll[0].pool,
+    );
+
+    // Devolver al pool: una fila negativa.
+    const poolBeforeReturn = await unassignedPool(db);
+    allocs.push(
+      ...(await returnToPool(db, {
+        envelopeId: env("CEDEARs"),
+        amount: "500000",
+        currency: "ARS",
+        date: DATE,
+        note: "Vuelve al pool",
+      })),
+    );
+    const poolAfter = await unassignedPool(db);
+    check(
+      "el pool en ARS sube 500.000",
+      poolAfter[0].pool,
+      sumAmounts([poolBeforeReturn[0].pool, "500000"]),
+    );
+
+    // Y lo que no se permite.
+    await mustFail("mover a mismo sobre", () =>
+      moveBetweenEnvelopes(db, {
+        fromEnvelopeId: env("Amigos"),
+        toEnvelopeId: env("Amigos"),
+        amount: "1000",
+        currency: "ARS",
+        date: DATE,
+      }),
+    );
+    await mustFail("mover un monto negativo", () =>
+      moveBetweenEnvelopes(db, {
+        fromEnvelopeId: env("Amigos"),
+        toEnvelopeId: env("Rochi"),
+        amount: "-1000",
+        currency: "ARS",
+        date: DATE,
+      }),
+    );
   }
 
   /* ------------------------------------------- parseo de montos (UI) --- */
@@ -371,19 +486,6 @@ async function main() {
 
   /* -------------------------------------------------- lo que debe fallar --- */
   console.log("\n### Rechazos esperados");
-  async function mustFail(label: string, fn: () => Promise<unknown>) {
-    try {
-      await fn();
-      failures++;
-      console.log(`  ✗ ${label}: NO falló, y debía fallar`);
-    } catch (err) {
-      // El mensaje útil de un error de trigger viene en `cause`, no en el
-      // "Failed query" que envuelve postgres-js.
-      const e = err as Error & { cause?: Error };
-      const msg = (e.cause?.message ?? e.message).split("\n")[0];
-      console.log(`  ✓ ${label}: ${msg.slice(0, 95)}`);
-    }
-  }
 
   await mustFail("cruzar monedas sin cuentas de FX", () =>
     createTransaction(db, {
@@ -460,6 +562,9 @@ async function main() {
 
   /* --------------------------------------------------------------- limpieza */
   console.log("\n### Limpieza");
+  for (const id of allocs) {
+    await db.delete(schema.allocations).where(eq(schema.allocations.id, id));
+  }
   for (const id of created) {
     await db.delete(schema.transactions).where(eq(schema.transactions.id, id));
   }
@@ -474,6 +579,18 @@ async function main() {
   check("Tarjeta ARS restaurada", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
   check("Tarjeta USD intacta", await balance("Tarjeta de crédito BBVA — USD"), "-221");
   check("Equity:FX:ARS restaurado", await balance("Equity:FX:ARS"), "0");
+  check(
+    "sobre Suscripciones restaurado (USD)",
+    await envelopeBalance("Suscripciones", "USD"),
+    "-144",
+  );
+  // 2.545.100 y no 5.499.100: la línea de CEDEARs del plan es del nivel
+  // variable, así que todavía no generó allocation. Solo está la apertura.
+  check(
+    "sobre CEDEARs restaurado (ARS)",
+    await envelopeBalance("CEDEARs", "ARS"),
+    "2545100",
+  );
 
   console.log(failures === 0 ? "\nTodos los casos OK.\n" : `\n${failures} fallas.\n`);
   await client.end();
