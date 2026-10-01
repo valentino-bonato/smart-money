@@ -58,9 +58,14 @@ export default async function SobresPage() {
     <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
       <header className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Sobres</h1>
-        <Link href="/" className="text-sm underline opacity-70">
-          Cargar gasto
-        </Link>
+        <nav className="flex gap-3 text-sm">
+          <Link href="/" className="underline opacity-70">
+            Cargar
+          </Link>
+          <Link href="/plan" className="underline opacity-70">
+            Plan
+          </Link>
+        </nav>
       </header>
 
       {/* El pool: lo que todavía no tiene propósito. Era el síntoma exacto del

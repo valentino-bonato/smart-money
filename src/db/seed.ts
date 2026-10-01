@@ -16,7 +16,7 @@
  * Toda la plata viaja como `string`: `numeric` mapea a `string` en
  * drizzle-orm@0.45.3 y no se convierte a `number` en ningún punto.
  */
-import { sql as dsql } from "drizzle-orm";
+import { eq, sql as dsql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { loadEnv } from "./env";
@@ -358,6 +358,34 @@ async function main() {
         },
       ])
       .returning();
+
+    // Dónde vive la plata de cada sobre. Sale de §2 y §5: la caja chica del
+    // día a día es Mercado Pago, el auto corriente tiene su cuenta, las metas
+    // en dólares viven en el fondo de Cocos y el ahorro del auto está en
+    // CEDEARs del S&P500. Las suscripciones van al fondo USD porque es con
+    // esos dólares que se paga el resumen, y el inglés se queda en la caja de
+    // ahorro, que es de donde se paga.
+    const settlement: Record<string, string | null> = {
+      "Auto — corriente": "BBVA cuenta corriente",
+      "Comida y súper": "Mercado Pago",
+      Amigos: "Mercado Pago",
+      Rochi: "Mercado Pago",
+      "Puntuales del mes": "Mercado Pago",
+      Suscripciones: "Cocos Capital — fondo USD",
+      Inglés: "BBVA caja de ahorro",
+      Viaje: "Cocos Capital — fondo USD",
+      "Fondo de emergencia": "Cocos Capital — fondo USD",
+      "Auto — ahorro": "Cocos Capital — CEDEARs",
+      CEDEARs: "Cocos Capital — CEDEARs",
+    };
+    for (const row of envelopeRows) {
+      const target = settlement[row.name];
+      if (!target) continue;
+      await tx
+        .update(schema.envelopes)
+        .set({ settlementAccountId: acct(target).id })
+        .where(eq(schema.envelopes.id, row.id));
+    }
 
     const env = (name: string) => {
       const row = envelopeRows.find((e) => e.name === name);

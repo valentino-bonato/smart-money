@@ -26,6 +26,7 @@ npm run dev
 | `npm run db:migrate` | aplica las migraciones pendientes |
 | `npm run db:seed` | borra y recarga los datos reales al 1-oct-2026, y verifica los números contra la spec |
 | `npm run db:verify` | prueba los 3 casos raros de §8 contra el invariante real |
+| `npm run db:plan` | corre el motor del planner y lo compara con el plan de §5 |
 | `npm run db:reset` | borra el esquema completo (destructivo, solo local) |
 | `npm run db:studio` | Drizzle Studio |
 
@@ -61,6 +62,13 @@ asiento sin esas patas tira un error explícito antes de tocar la base.
 La sugerencia por comercio arranca vacía y aprende del uso. La moneda la define
 la categoría, y las cuentas de origen se filtran a esa moneda. El saldo del
 sobre se muestra junto al selector, que es el momento en que importa.
+
+## El plan del mes
+
+`/plan` corre la cascada de tres niveles con catch-up y devuelve **la lista de
+transferencias concretas a hacer**, que es el criterio de éxito de §7. Aprobar
+materializa cada línea como una asignación — y solo las de los niveles cuyo
+cobro ya entró: los cobros esperados se muestran y no se asignan.
 
 ## Pantalla de sobres
 

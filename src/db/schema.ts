@@ -124,6 +124,16 @@ export const envelopes = pgTable(
     // tener objetivo (las suscripciones cuestan 113,82 USD y se pagan con una
     // tarjeta en ARS).
     contributionCurrency: currency("contribution_currency"),
+    // Dónde tiene que vivir físicamente la plata de este sobre. La spec no lo
+    // modela: §5 deduce a mano que los 450.000 del auto van a la cuenta
+    // corriente y los 7.441.000 de las metas a Cocos. Sin esta columna el
+    // planner no puede devolver la lista de transferencias concretas, que es
+    // el criterio de éxito de la pantalla del plan en §7.
+    // null = la plata se queda donde está (no hay transferencia que hacer).
+    settlementAccountId: uuid("settlement_account_id").references(
+      (): AnyPgColumn => accounts.id,
+      { onDelete: "set null" },
+    ),
   },
   (t) => [
     unique("envelopes_user_name").on(t.userId, t.name),
@@ -413,6 +423,10 @@ export const accountsRelations = relations(accounts, ({ one, many }) => ({
 
 export const envelopesRelations = relations(envelopes, ({ one, many }) => ({
   user: one(users, { fields: [envelopes.userId], references: [users.id] }),
+  settlementAccount: one(accounts, {
+    fields: [envelopes.settlementAccountId],
+    references: [accounts.id],
+  }),
   allocations: many(allocations),
   entries: many(entries),
   planLines: many(planLines),

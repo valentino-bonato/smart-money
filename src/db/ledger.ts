@@ -46,21 +46,37 @@ export type TransactionInput = {
 const SCALE = 4n;
 const SCALE_POW = 10n ** SCALE;
 
-/** "-1234.5" -> -12345000n (unidades de 10^-4). Exacto, sin float. */
-export function toMinor(amount: string): bigint {
+/**
+ * "-1234.5" -> -12345000n a escala 4. Exacto, sin float.
+ *
+ * La escala es un parámetro porque no todo es plata: `prices.rate` es
+ * `numeric(20,6)` y viene de la base como "1550.000000", que a escala 4 sería
+ * un error.
+ */
+export function toScaled(amount: string, scale: number): bigint {
   const match = /^(-?)(\d*)(?:\.(\d*))?$/.exec(amount.trim());
   if (!match || (!match[2] && !match[3])) {
-    throw new Error(`Monto inválido: ${JSON.stringify(amount)}`);
+    throw new Error(`Número inválido: ${JSON.stringify(amount)}`);
   }
   const [, sign, whole = "", frac = ""] = match;
-  if (frac.length > Number(SCALE)) {
+  if (frac.replace(/0+$/, "").length > scale) {
+    throw new Error(`Número con más de ${scale} decimales: ${amount}`);
+  }
+  const padded = frac.slice(0, scale).padEnd(scale, "0");
+  const value =
+    BigInt(whole || "0") * 10n ** BigInt(scale) + BigInt(padded || "0");
+  return sign === "-" ? -value : value;
+}
+
+/** Escala 4, la de `numeric(20,4)`: la que usa toda la plata. */
+export function toMinor(amount: string): bigint {
+  try {
+    return toScaled(amount, Number(SCALE));
+  } catch (err) {
     throw new Error(
-      `Monto con más de ${SCALE} decimales: ${amount} (numeric(20,4))`,
+      `${(err as Error).message.replace("Número", "Monto")} (numeric(20,4))`,
     );
   }
-  const padded = frac.padEnd(Number(SCALE), "0");
-  const value = BigInt(whole || "0") * SCALE_POW + BigInt(padded || "0");
-  return sign === "-" ? -value : value;
 }
 
 /** -12345000n -> "-1234.5" */

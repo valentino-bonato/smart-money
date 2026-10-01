@@ -82,6 +82,48 @@ tiene. Hace falta porque el de Suscripciones son 113,82 **USD** aunque el sobre
 se consuma en ARS: no se puede inferir de `target_currency`, que solo existe en
 las metas.
 
+## El motor del planner
+
+`src/db/planner.ts`. Es el punto de toda la app: el dolor no es registrar
+gastos, es decidir cada mes a dónde va la plata.
+
+**El orden de la cascada no está en una tabla.** El rol de cada sobre se deduce
+de sus propias columnas, lo que evita una configuración paralela que se
+desincronice:
+
+| columna | rol en la cascada |
+| --- | --- |
+| `contribution_rule = 'fixed'` | obligación del piso, en orden de `display_order` |
+| `deadline_hard = true` | meta del piso (el viaje) |
+| `target_amount` sin `target_date` | absorbe el sobrante del piso y se completa primero en el nivel 2 (el fondo de emergencia) |
+| `target_date` con `deadline_hard = false` | meta del nivel 2 (el auto) |
+| `contribution_rule = 'remainder'` | se lleva el resto (CEDEARs) |
+| `contribution_rule = null` | no entra; se carga como puntual del mes |
+
+Invariantes del motor, cada uno con su assert en `npm run db:plan`:
+
+- **Recalcular un período excluye el plan de ese período.** Si no, su propio
+  aporte cuenta como progreso de la meta y el catch-up sale más bajo: el mes se
+  cuenta pendiente y pagado a la vez.
+- **Del resumen de tarjeta solo entra la parte que ningún sobre cubre.** Los 221
+  USD de octubre ya salieron de sus sobres al consumirse (el hostel del Viaje,
+  las suscripciones de Suscripciones); pedirle al piso otros 221 reservaría la
+  misma plata dos veces. Los 200.000 en pesos vienen del saldo de apertura y no
+  tienen sobre detrás: esos sí.
+- **Los niveles variables solo cuentan lo cobrado, nunca un esperado.** El piso
+  es la única excepción: el sueldo es fijo y cae el día 1, así que si todavía no
+  hay asiento se usa `expected_amount` — y `availableSource` lo dice. Aprobar
+  materializa allocations solo de los niveles cuyo cobro entró.
+- **La suma de las transferencias es igual al total del plan.** Todo peso
+  asignado tiene un destino (`envelopes.settlement_account_id`), incluso cuando
+  el destino es la cuenta donde ya está.
+
+`npm run db:plan` corre el motor sobre octubre con los montos de §5 y lo compara
+con el plan que el seed armó a mano desde la spec. La tolerancia por línea es de
+500 pesos porque §5 redondeó los montos en dólares (824 USD a 1.550 son
+1.277.200 y la spec escribió 1.277.000); los totales por nivel sí tienen que dar
+exactos.
+
 ## Pantalla de sobres
 
 `src/app/sobres/` — saldo por sobre y moneda, progreso de metas, pool sin

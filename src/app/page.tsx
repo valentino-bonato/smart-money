@@ -82,9 +82,14 @@ export default async function Page() {
     <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
       <header className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Cargar gasto</h1>
-        <Link href="/sobres" className="text-sm underline opacity-70">
-          Sobres
-        </Link>
+        <nav className="flex gap-3 text-sm">
+          <Link href="/sobres" className="underline opacity-70">
+            Sobres
+          </Link>
+          <Link href="/plan" className="underline opacity-70">
+            Plan
+          </Link>
+        </nav>
       </header>
 
       <QuickEntry

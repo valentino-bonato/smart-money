@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/reset.ts",
-    "db:verify": "tsx src/db/verify-cases.ts"
+    "db:verify": "tsx src/db/verify-cases.ts",
+    "db:plan": "tsx src/db/plan-check.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
