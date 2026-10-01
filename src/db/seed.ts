@@ -2,7 +2,8 @@
  * Seed con los datos reales al 1-oct-2026 — paso 2 del orden de construcción (§7).
  *
  * Contenido, según la spec:
- *   · 6 cuentas de usuario + las de sistema
+ *   · 6 cuentas de usuario + "Me deben" + 6 de gasto + 4 de ingreso
+ *     + las de sistema
  *   · 9 sobres (5 de gasto + 4 de tipo meta, de los cuales 3 tienen objetivo)
  *   · saldos de apertura al 1-oct-2026 contra Equity:Opening
  *   · 3 fuentes de ingreso
@@ -88,7 +89,48 @@ async function main() {
         currency: "USD" as const,
         institution: "Cocos Capital",
       },
+      // §8, gasto compartido con reembolso: si se pagan 100.000 y devuelven
+      // 75.000, cargar gasto 100.000 + ingreso 75.000 distorsiona el promedio
+      // de "amigos", que es input del planner. Con esta cuenta el gasto real
+      // es 25.000 y los 75.000 son un crédito que se cobra después.
+      {
+        name: "Me deben",
+        type: "asset" as const,
+        currency: "ARS" as const,
+        institution: null,
+      },
     ];
+
+    // Las categorías SON las cuentas de gasto: no hay tabla de categorías
+    // aparte. El sobre sigue siendo una dimensión separada.
+    const expenseAccounts = [
+      "Gastos:Comida y súper",
+      "Gastos:Salidas y amigos",
+      "Gastos:Rochi",
+      "Gastos:Auto",
+      "Gastos:Suscripciones",
+      "Gastos:Extras y regalos",
+    ].map((name) => ({
+      name,
+      type: "expense" as const,
+      currency: "ARS" as const,
+      institution: null,
+    }));
+
+    // Una cuenta de ingreso por fuente. El rendimiento de Cocos va aparte
+    // porque §8 lo marca: es ingreso, no sueldo, y no entra a la cascada como
+    // plata asignable salvo decisión explícita.
+    const incomeAccounts = [
+      "Ingresos:Sueldo",
+      "Ingresos:Consultoría",
+      "Ingresos:Desarrollos",
+      "Ingresos:Rendimiento Cocos",
+    ].map((name) => ({
+      name,
+      type: "income" as const,
+      currency: "ARS" as const,
+      institution: null,
+    }));
 
     // Cuentas de sistema: las maneja la app, el usuario no las ve.
     // Equity:Opening se parte por moneda porque "una cuenta = una moneda" y el
@@ -116,6 +158,18 @@ async function main() {
           userId: user.id,
           isSystem: false,
           displayOrder: i + 1,
+        })),
+        ...expenseAccounts.map((a, i) => ({
+          ...a,
+          userId: user.id,
+          isSystem: false,
+          displayOrder: 20 + i,
+        })),
+        ...incomeAccounts.map((a, i) => ({
+          ...a,
+          userId: user.id,
+          isSystem: false,
+          displayOrder: 40 + i,
         })),
         ...systemAccounts.map((a, i) => ({
           ...a,

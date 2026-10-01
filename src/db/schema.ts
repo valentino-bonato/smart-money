@@ -14,6 +14,7 @@
  */
 import { relations } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   boolean,
   check,
@@ -26,6 +27,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -158,6 +160,12 @@ export const transactions = pgTable(
     planId: uuid("plan_id").references(() => plans.id, {
       onDelete: "set null",
     }),
+    // Si el asiento lo generó una suscripción, queda linkeado para que
+    // regenerar el mes no duplique el cargo.
+    recurringExpenseId: uuid("recurring_expense_id").references(
+      (): AnyPgColumn => recurringExpenses.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -166,6 +174,14 @@ export const transactions = pgTable(
     index("transactions_user_date_idx").on(t.userId, t.date),
     index("transactions_payee_idx").on(t.userId, t.payee),
     index("transactions_plan_idx").on(t.planId),
+    // Una suscripción genera como máximo un asiento por mes: hace que el
+    // generador sea idempotente sin tener que consultar antes de escribir.
+    uniqueIndex("transactions_recurring_month_idx")
+      // Cast explícito a timestamp: date_trunc sobre una columna `date`
+      // resuelve a la variante timestamptz, que es STABLE y Postgres no la
+      // acepta en una expresión de índice.
+      .on(t.recurringExpenseId, sql`date_trunc('month', ${t.date}::timestamp)`)
+      .where(sql`${t.recurringExpenseId} is not null`),
   ],
 );
 
@@ -397,6 +413,10 @@ export const transactionsRelations = relations(
   ({ one, many }) => ({
     user: one(users, { fields: [transactions.userId], references: [users.id] }),
     plan: one(plans, { fields: [transactions.planId], references: [plans.id] }),
+    recurringExpense: one(recurringExpenses, {
+      fields: [transactions.recurringExpenseId],
+      references: [recurringExpenses.id],
+    }),
     entries: many(entries),
   }),
 );

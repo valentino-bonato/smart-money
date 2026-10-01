@@ -53,3 +53,24 @@ el signo de nada.
 - `pool_sin_asignar` = 215.000 ARS (200.000 del resumen de la tarjeta, que no
   es un sobre, + 15.000 de Mercado Pago) y 0 USD.
 - Patrimonio: 8.158.350 ARS.
+
+## Escribir en el libro contable
+
+Toda transacción pasa por `src/db/ledger.ts`. No insertar en `entries` a mano
+desde fuera de ahí (el seed es la excepción, porque arma la apertura).
+
+- `createTransaction` valida el balance por moneda en TS antes de escribir, solo
+  para dar un error legible en vez de una excepción de plpgsql. La garantía real
+  sigue siendo el trigger.
+- Montos: `toMinor`/`fromMinor`/`sumAmounts` operan con BigInt sobre 4 decimales
+  (igual que `numeric(20,4)`). Es la única forma permitida de sumar plata en JS.
+- `rateAt` implementa el fallback al último precio ≤ fecha y acepta `source` +
+  `fallbackSource`, porque el tipo de cambio efectivo de la tarjeta (con
+  impuestos y spread) no es el dólar oficial.
+- Si tocás la capa, corré `npm run db:seed && npm run db:verify`.
+
+## Nota de Postgres
+
+`date_trunc` sobre una columna `date` resuelve a la variante `timestamptz`, que
+es STABLE: Postgres la rechaza en una expresión de índice. Hay que castear a
+`timestamp` (ver `transactions_recurring_month_idx`).

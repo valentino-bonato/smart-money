@@ -25,6 +25,7 @@ npm run dev
 | `npm run db:generate` | genera una migración desde `src/db/schema.ts` |
 | `npm run db:migrate` | aplica las migraciones pendientes |
 | `npm run db:seed` | borra y recarga los datos reales al 1-oct-2026, y verifica los números contra la spec |
+| `npm run db:verify` | prueba los 3 casos raros de §8 contra el invariante real |
 | `npm run db:reset` | borra el esquema completo (destructivo, solo local) |
 | `npm run db:studio` | Drizzle Studio |
 
@@ -41,6 +42,18 @@ npm run dev
 Las conversiones ARS↔USD pasan por cuentas de FX (`Equity:FX:*`), no por precio
 inline, para que el invariante no tenga excepciones y pueda vivir como
 constraint en la base (`entries_balanced`, `DEFERRABLE INITIALLY DEFERRED`).
+
+## Los tres casos raros
+
+Transferencia, pago del resumen de la tarjeta y compra de dólares salen todos de
+`src/db/ledger.ts` y **ninguno es un gasto**. `npm run db:verify` lo prueba
+contra la base: commitea cada caso de verdad (si hiciera rollback el constraint
+trigger deferido no llegaría a correr y la prueba no probaría nada), verifica
+los saldos y el total de gasto del mes, y después limpia.
+
+La compra de dólares pasa por las cuentas de FX: la pata ARS cierra contra
+`Equity:FX:ARS` y la pata USD contra `Equity:FX:USD`. Cruzar monedas en un mismo
+asiento sin esas patas tira un error explícito antes de tocar la base.
 
 ## Reglas no negociables del código
 
