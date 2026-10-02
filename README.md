@@ -55,6 +55,28 @@ statements a nivel de protocolo (los que usa postgres-js) funcionan igual. Pero
 no soporta las cosas de alcance de sesión que usan las migraciones, así que
 migrar por ahí falla o se aplica a medias.
 
+### Mudar la base
+
+El dump completo de `pg_dump` sirve tal cual, y el orden importa: carga los
+datos **antes** de crear triggers y foreign keys, así que el constraint trigger
+deferido no interfiere durante la carga y las FKs se validan al crearse.
+
+```bash
+pg_dump --no-owner --no-privileges smart_money > money.sql
+psql -v ON_ERROR_STOP=1 -d "$DIRECT_DATABASE_URL" -f money.sql   # la DIRECTA
+```
+
+Va por la conexión **directa**, no por el pooler. Lleva también el esquema
+`drizzle` con las migraciones aplicadas, así que `db:migrate` después no
+reintenta nada.
+
+Ensayado contra una base limpia el 2-oct-2026: los 22 asientos, las 52
+partidas, los 8 saldos y los dos triggers llegaron idénticos — incluidos los
+flags `DEFERRABLE INITIALLY DEFERRED`, verificados en `pg_trigger` y probados
+rechazando un asiento desbalanceado del otro lado.
+
+El dump tiene montos reales: sueldo, saldos, metas. No va al repo.
+
 ## El modelo, en tres frases
 
 - **¿Dónde está la plata?** → la cuenta. **¿Para qué es la plata?** → el sobre.
