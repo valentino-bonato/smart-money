@@ -28,3 +28,20 @@ export function loadEnv(opts: { scratch?: boolean } = {}) {
   }
   return process.env.DATABASE_URL;
 }
+
+/**
+ * La conexión para migrar. En local es la misma; en Neon tiene que ser la
+ * **directa**, no la del pooler.
+ *
+ * PgBouncer corre en transaction mode y ahí no funcionan las cosas de alcance
+ * de sesión — `SET`, `PREPARE` de SQL, tablas temporales que sobreviven a la
+ * transacción. Las migraciones usan varias de esas, así que por el pooler
+ * fallan o, peor, se aplican a medias.
+ */
+export function loadMigrationEnv() {
+  config({ path: ".env.local", quiet: true });
+  config({ path: ".env", quiet: true });
+  const url = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) throw new Error("Falta DATABASE_URL (ver .env.example)");
+  return url;
+}

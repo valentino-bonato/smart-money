@@ -38,6 +38,23 @@ npm run dev
 | `npm run db:reset` | borra el esquema completo (destructivo, solo local) |
 | `npm run db:studio` | Drizzle Studio |
 
+## Deploy
+
+En Vercel + Neon. Lo único que no es obvio: **hay dos cadenas de conexión y no
+son intercambiables.**
+
+| variable | cuál | para qué |
+| --- | --- | --- |
+| `DATABASE_URL` | la que tiene `-pooler` en el host | la app |
+| `DIRECT_DATABASE_URL` | la que **no** lo tiene | las migraciones |
+
+El pooler de Neon es PgBouncer en *transaction mode*. Para la app está perfecto:
+mantiene la misma conexión durante toda la transacción, que es lo que el
+constraint trigger deferido necesita para validar al COMMIT, y los prepared
+statements a nivel de protocolo (los que usa postgres-js) funcionan igual. Pero
+no soporta las cosas de alcance de sesión que usan las migraciones, así que
+migrar por ahí falla o se aplica a medias.
+
 ## El modelo, en tres frases
 
 - **¿Dónde está la plata?** → la cuenta. **¿Para qué es la plata?** → el sobre.

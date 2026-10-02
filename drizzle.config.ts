@@ -1,15 +1,16 @@
 import { defineConfig } from "drizzle-kit";
-import { loadEnv } from "./src/db/env";
+import { loadMigrationEnv } from "./src/db/env";
 
-// Las migraciones van a la base que diga DATABASE_URL. `db:migrate` apunta a
-// la real; `db:migrate:test` la sobreescribe con la de pruebas.
-loadEnv();
+// Migrar va SIEMPRE por la conexión directa. En Neon el pooler corre en
+// transaction mode y las migraciones usan features de sesión que ahí no
+// existen. `db:migrate:test` sobreescribe la URL con la base de pruebas.
+const url = process.env.DATABASE_URL ?? loadMigrationEnv();
 
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/schema.ts",
   out: "./drizzle",
-  dbCredentials: { url: process.env.DATABASE_URL! },
+  dbCredentials: { url },
   strict: true,
   verbose: true,
 });
