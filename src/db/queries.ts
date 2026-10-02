@@ -501,3 +501,91 @@ export async function nextPlanningPeriod(
   `);
   return (rows as unknown as { period: string }[])[0].period;
 }
+
+export type BudgetLine = {
+  envelopeId: string;
+  name: string;
+  rollover: "accumulate" | "reset";
+  /** Asignado este mes, en pesos (lo de otras monedas, convertido). */
+  assignedArs: string;
+  /** Gastado este mes, en pesos. */
+  spentArs: string;
+  /** Lo que queda del presupuesto DEL MES. Puede ser negativo. */
+  leftArs: string;
+  /** Detalle por moneda, porque un sobre puede recibir pesos y gastar dólares. */
+  assigned: { currency: Currency; amount: string }[];
+  spent: { currency: Currency; amount: string }[];
+  displayOrder: number;
+};
+
+/**
+ * Presupuesto del mes contra lo gastado, por sobre.
+ *
+ * Es una pregunta distinta de la que responde la pantalla de sobres. Ahí el
+ * saldo es acumulado, y los sobres con `rollover = accumulate` arrastran meses
+ * anteriores: el Viaje puede tener 1.200 USD y no decir nada sobre si este mes
+ * se gastó de más. Acá se mira solo la ventana del mes.
+ *
+ * "Asignado" son TODAS las allocations del período, no solo las del plan: mover
+ * plata de un sobre a otro a mitad de mes cambia el presupuesto, y esconderlo
+ * haría que la pantalla mienta justo cuando más importa.
+ *
+ * La comparación se hace en pesos porque un sobre puede recibir pesos y gastar
+ * dólares — Suscripciones es exactamente eso. El detalle por moneda va aparte;
+ * no se guarda ningún saldo convertido, la conversión vive solo en esta vista.
+ */
+export async function monthlyBudget(
+  exec: Executor,
+  opts: { userId: string; period: string; rate: string },
+): Promise<BudgetLine[]> {
+  const rows = await exec.execute<BudgetLine>(sql`
+    with win as (
+      select ${opts.period}::date as a,
+             (${opts.period}::date + interval '1 month')::date as b
+    ), alloc as (
+      select al.envelope_id as id, al.currency, sum(al.amount) as total
+      from allocations al, win
+      where al.date >= win.a and al.date < win.b
+      group by 1, 2
+    ), spent as (
+      select en.envelope_id as id, en.currency, sum(en.amount) as total
+      from entries en
+      join transactions t on t.id = en.transaction_id, win
+      where en.envelope_id is not null and t.date >= win.a and t.date < win.b
+      group by 1, 2
+    ), toArs as (
+      select id, sum(case when currency = 'USD'
+                          then total * ${opts.rate}::numeric else total end) as ars
+      from alloc group by id
+    ), spentArs as (
+      select id, sum(case when currency = 'USD'
+                          then total * ${opts.rate}::numeric else total end) as ars
+      from spent group by id
+    )
+    select
+      e.id                                   as "envelopeId",
+      e.name                                 as name,
+      e.rollover                             as rollover,
+      round(coalesce(a.ars, 0), 2)::text     as "assignedArs",
+      round(coalesce(s.ars, 0), 2)::text     as "spentArs",
+      round(coalesce(a.ars, 0) - coalesce(s.ars, 0), 2)::text as "leftArs",
+      coalesce((select json_agg(json_build_object('currency', x.currency,
+                                                  'amount', x.total::text)
+                                order by x.currency)
+                from alloc x where x.id = e.id and x.total <> 0), '[]'::json)
+                                             as assigned,
+      coalesce((select json_agg(json_build_object('currency', x.currency,
+                                                  'amount', x.total::text)
+                                order by x.currency)
+                from spent x where x.id = e.id and x.total <> 0), '[]'::json)
+                                             as spent,
+      e.display_order                        as "displayOrder"
+    from envelopes e
+    left join toArs a on a.id = e.id
+    left join spentArs s on s.id = e.id
+    where e.user_id = ${opts.userId} and e.archived_at is null
+      and (coalesce(a.ars, 0) <> 0 or coalesce(s.ars, 0) <> 0)
+    order by e.display_order
+  `);
+  return rows as unknown as BudgetLine[];
+}

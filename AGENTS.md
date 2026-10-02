@@ -256,6 +256,28 @@ El cero sí es un saldo válido acá, a diferencia de en la carga — `parseAmou
 lo rechaza a propósito (un gasto de 0 no existe), así que la acción lo acepta
 explícito antes de parsear.
 
+## Pantalla de presupuesto
+
+`/presupuesto` — lo asignado este mes contra lo gastado, por sobre.
+
+**Roza el límite de §7** ("sin dashboards, gráficos ni reportes en el v1"). Se
+construyó igual, pedido explícito del usuario, con este criterio: no es un
+tablero de métricas, es la pregunta central de un sistema de sobres — ¿me estoy
+pasando o no? No tiene gráficos ni KPIs: una lista, una barra de progreso y la
+marca del día del mes.
+
+Responde algo que la pantalla de sobres **no** puede: ahí el saldo es acumulado
+y los sobres con `rollover = accumulate` arrastran meses anteriores, así que un
+sobre con saldo alto puede estar gastando de más este mes sin que se note.
+
+- "Asignado" son TODAS las allocations del período, no solo las del plan: mover
+  plata entre sobres a mitad de mes cambia el presupuesto de verdad.
+- La comparación se hace en pesos porque un sobre puede recibir pesos y gastar
+  dólares (Suscripciones es exactamente eso). El detalle por moneda se muestra
+  aparte; no se guarda ningún saldo convertido.
+- La marca vertical en la barra es el día del mes. Sin esa vara, un 60% gastado
+  no dice nada: depende de si es día 5 o día 25.
+
 ## Layout
 
 Una sola regla: **el teléfono no se toca.** Es donde se cargan los gastos y es

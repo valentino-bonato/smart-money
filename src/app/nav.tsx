@@ -18,6 +18,7 @@ const LINKS = [
   { href: "/mover", label: "Mover" },
   { href: "/sobres", label: "Sobres" },
   { href: "/plan", label: "Plan" },
+  { href: "/presupuesto", label: "Presupuesto" },
   { href: "/conciliacion", label: "Conciliar" },
 ] as const;
 
