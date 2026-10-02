@@ -1,5 +1,4 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import Link from "next/link";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { computePlan, loadPlan } from "@/db/planner";
@@ -67,24 +66,8 @@ export default async function PlanPage({
   const payments = computed.lines.filter((l) => l.accountId);
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
-      <header className="flex items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold">Plan de {monthLabel}</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/" className="underline opacity-70">
-            Cargar
-          </Link>
-          <Link href="/sobres" className="underline opacity-70">
-            Sobres
-          </Link>
-          <Link href="/mover" className="underline opacity-70">
-            Mover
-          </Link>
-          <Link href="/conciliacion" className="underline opacity-70">
-            Conciliar
-          </Link>
-        </nav>
-      </header>
+    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
+      <h1 className="text-xl font-semibold">Plan de {monthLabel}</h1>
 
       <p className="text-sm opacity-70">
         {approved
@@ -93,6 +76,8 @@ export default async function PlanPage({
         Dólar {formatMoney(rate, "ARS")}.
       </p>
 
+      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
+      <div className="flex flex-col gap-8">
       {TIERS.map(({ tier, title, source }) => {
         const lines = computed.lines.filter((l) => l.tier === tier);
         const available = computed.available[tier];
@@ -165,6 +150,9 @@ export default async function PlanPage({
         );
       })}
 
+
+      </div>
+      <div className="flex flex-col gap-8">
       {/* El criterio de éxito de la pantalla: la lista de transferencias
           concretas. Sin esto el plan obliga a sentarse a calcular. */}
       <section className="flex flex-col gap-2">
@@ -254,6 +242,8 @@ export default async function PlanPage({
           planId={saved?.plan.id ?? null}
         />
       </section>
+      </div>
+      </div>
     </main>
   );
 }

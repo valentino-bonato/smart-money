@@ -256,6 +256,19 @@ El cero sí es un saldo válido acá, a diferencia de en la carga — `parseAmou
 lo rechaza a propósito (un gasto de 0 no existe), así que la acción lo acepta
 explícito antes de parsear.
 
+## Layout
+
+Una sola regla: **el teléfono no se toca.** Es donde se cargan los gastos y es
+el criterio de §8. El contenedor sigue siendo `max-w-xl` y todo apilado; recién
+en `lg:` se ensancha a `max-w-6xl` y pasa a dos columnas.
+
+En cada pantalla la columna izquierda es lo que se hace y la derecha lo que se
+mira — salvo en sobres, donde el formulario va con `lg:order-first` para que el
+pool quede arriba a la izquierda y la lista de sobres ocupe el alto.
+
+El nav vive en `src/app/nav.tsx` y lo monta el layout. Antes cada pantalla
+repetía sus links, así que agregar una obligaba a tocar las cinco.
+
 ## Pantalla de carga
 
 `src/app/page.tsx` (server component) + `quick-entry.tsx` (client) +

@@ -1,5 +1,4 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import Link from "next/link";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { accountBalances, rateForView, recentTransactions } from "@/db/queries";
@@ -60,24 +59,8 @@ export default async function MoverPage() {
   const moves = recent.filter((r) => r.kind !== "gasto" && r.kind !== "apertura");
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
-      <header className="flex items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold">Mover plata</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/" className="underline opacity-70">
-            Cargar
-          </Link>
-          <Link href="/sobres" className="underline opacity-70">
-            Sobres
-          </Link>
-          <Link href="/plan" className="underline opacity-70">
-            Plan
-          </Link>
-          <Link href="/conciliacion" className="underline opacity-70">
-            Conciliar
-          </Link>
-        </nav>
-      </header>
+    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
+      <h1 className="text-xl font-semibold">Mover plata</h1>
 
       <p className="text-sm opacity-70">
         Pasar plata a Mercado Pago, pagar el resumen de la tarjeta y comprar
@@ -86,7 +69,8 @@ export default async function MoverPage() {
         movimientos.
       </p>
 
-      <MoveMoneyForm
+      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
+            <MoveMoneyForm
         accounts={options}
         envelopes={envelopes.map((e) => ({ id: e.id, name: e.name }))}
         today={today}
@@ -134,6 +118,7 @@ export default async function MoverPage() {
           </ul>
         </section>
       ) : null}
+      </div>
     </main>
   );
 }

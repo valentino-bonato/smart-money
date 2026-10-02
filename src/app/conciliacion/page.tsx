@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { db } from "@/db";
 import {
   missingEntries,
@@ -32,30 +31,35 @@ export default async function ConciliacionPage() {
   const unresolved = history.filter((h) => !h.resolved);
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
-      <header className="flex items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold">Conciliación</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/" className="underline opacity-70">
-            Cargar
-          </Link>
-          <Link href="/sobres" className="underline opacity-70">
-            Sobres
-          </Link>
-          <Link href="/plan" className="underline opacity-70">
-            Plan
-          </Link>
-          <Link href="/mover" className="underline opacity-70">
-            Mover
-          </Link>
-        </nav>
-      </header>
+    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
+      <h1 className="text-xl font-semibold">Conciliación</h1>
 
       <p className="text-sm opacity-70">
         Pegá los saldos del homebanking y la app dice la diferencia. Si cierran
         al peso, el historial está completo y el planner puede confiar en él.
       </p>
 
+      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
+      <div className="flex flex-col gap-8">
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xs uppercase tracking-wide opacity-60">
+          Saldos del homebanking
+        </h2>
+        <ReconcileForm
+          accounts={accounts.map((a) => ({
+            accountId: a.accountId,
+            name: a.name,
+            currency: a.currency,
+            computedBalance: a.computedBalance,
+            lastReconciledAt: a.lastReconciledAt,
+          }))}
+          today={today}
+        />
+      </section>
+
+
+      </div>
+      <div className="flex flex-col gap-8">
       {/* La segunda mitad, que es la que vale: qué es lo más probable que
           falte. No adivina gastos sueltos — apunta a lo que la app ya sabe que
           tiene que pasar y todavía no vio. */}
@@ -96,22 +100,6 @@ export default async function ConciliacionPage() {
           No hay gastos fijos ni cobros esperados pendientes de cargar este mes.
         </p>
       )}
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Saldos del homebanking
-        </h2>
-        <ReconcileForm
-          accounts={accounts.map((a) => ({
-            accountId: a.accountId,
-            name: a.name,
-            currency: a.currency,
-            computedBalance: a.computedBalance,
-            lastReconciledAt: a.lastReconciledAt,
-          }))}
-          today={today}
-        />
-      </section>
 
       {unresolved.length ? (
         <section className="flex flex-col gap-2">
@@ -195,6 +183,8 @@ export default async function ConciliacionPage() {
           </ul>
         </section>
       ) : null}
+      </div>
+      </div>
     </main>
   );
 }

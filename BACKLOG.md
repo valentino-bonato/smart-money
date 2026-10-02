@@ -9,11 +9,10 @@ salió de una decisión concreta que se tomó o se postergó.
   pero las tres pantallas están armadas en una columna angosta (`max-w-xl`),
   pensada para el teléfono — que es donde se cargan los gastos. Faltan dos
   cosas distintas y conviene no confundirlas:
-  1. **Layout de escritorio**: aprovechar el ancho. Los sobres y el plan en
-     particular ganan mucho con dos columnas.
-  2. **Deploy**: que sea accesible sin `npm run dev`. El stack ya está elegido
-     para Vercel; hace falta una Postgres administrada y las variables de
-     entorno.
+  1. ~~**Layout de escritorio**~~ — hecho el 2-oct-2026. Dos columnas desde
+     `lg:`, nav compartido, y el teléfono sin cambios.
+  2. ~~**Deploy**~~ — hecho el 2-oct-2026. Vercel + Neon, con el repo privado en
+     GitHub y autenticación básica en `src/proxy.ts`.
 
 ## Corregir lo cargado
 

@@ -1,5 +1,4 @@
 import { asc, eq, inArray, isNull, and } from "drizzle-orm";
-import Link from "next/link";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import {
@@ -80,25 +79,10 @@ export default async function Page() {
     sources.find((s) => s.name === "Mercado Pago") ?? sources[0];
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Cargar gasto</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/sobres" className="underline opacity-70">
-            Sobres
-          </Link>
-          <Link href="/plan" className="underline opacity-70">
-            Plan
-          </Link>
-          <Link href="/mover" className="underline opacity-70">
-            Mover
-          </Link>
-          <Link href="/conciliacion" className="underline opacity-70">
-            Conciliar
-          </Link>
-        </nav>
-      </header>
+    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
+      <h1 className="text-xl font-semibold">Cargar gasto</h1>
 
+      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8">
       <QuickEntry
         categories={categories}
         envelopes={envelopeOptions}
@@ -114,7 +98,7 @@ export default async function Page() {
         defaultSourceId={defaultSource?.id ?? ""}
       />
 
-      <section className="flex flex-col gap-2">
+      <section className="flex flex-col gap-2 lg:mt-0">
         <h2 className="text-xs uppercase tracking-wide opacity-60">
           Últimos movimientos
         </h2>
@@ -165,6 +149,7 @@ export default async function Page() {
           </ul>
         )}
       </section>
+      </div>
     </main>
   );
 }

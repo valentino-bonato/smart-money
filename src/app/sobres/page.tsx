@@ -1,5 +1,4 @@
 import { asc, eq, isNull, and } from "drizzle-orm";
-import Link from "next/link";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { allocatedInMonth } from "@/db/envelopes";
@@ -55,44 +54,11 @@ export default async function SobresPage() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-8 flex flex-col gap-8">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Sobres</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/" className="underline opacity-70">
-            Cargar
-          </Link>
-          <Link href="/plan" className="underline opacity-70">
-            Plan
-          </Link>
-          <Link href="/mover" className="underline opacity-70">
-            Mover
-          </Link>
-          <Link href="/conciliacion" className="underline opacity-70">
-            Conciliar
-          </Link>
-        </nav>
-      </header>
+    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
+      <h1 className="text-xl font-semibold">Sobres</h1>
 
-      {/* El pool: lo que todavía no tiene propósito. Era el síntoma exacto del
-          problema — 2.706.000 sin destino al abrir. */}
-      <section className="flex flex-col gap-1">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Sin asignar
-        </h2>
-        <div className="flex gap-6">
-          {pool.map((p) => (
-            <span key={p.currency} className="tabular-nums">
-              {formatMoney(p.pool, p.currency)}
-            </span>
-          ))}
-        </div>
-        <p className="text-xs opacity-50">
-          No resta los resúmenes de tarjeta pendientes: la fórmula mira solo las
-          cuentas de activo.
-        </p>
-      </section>
-
+      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
+      <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-2">
         <h2 className="text-xs uppercase tracking-wide opacity-60">
           Saldo por sobre
@@ -168,6 +134,28 @@ export default async function SobresPage() {
         </ul>
       </section>
 
+
+      </div>
+      <div className="flex flex-col gap-8 lg:order-first">
+      {/* El pool: lo que todavía no tiene propósito. Era el síntoma exacto del
+          problema — 2.706.000 sin destino al abrir. */}
+      <section className="flex flex-col gap-1">
+        <h2 className="text-xs uppercase tracking-wide opacity-60">
+          Sin asignar
+        </h2>
+        <div className="flex gap-6">
+          {pool.map((p) => (
+            <span key={p.currency} className="tabular-nums">
+              {formatMoney(p.pool, p.currency)}
+            </span>
+          ))}
+        </div>
+        <p className="text-xs opacity-50">
+          No resta los resúmenes de tarjeta pendientes: la fórmula mira solo las
+          cuentas de activo.
+        </p>
+      </section>
+
       <section className="flex flex-col gap-3">
         <h2 className="text-xs uppercase tracking-wide opacity-60">
           Mover plata de propósito
@@ -181,6 +169,8 @@ export default async function SobresPage() {
           today={today}
         />
       </section>
+      </div>
+      </div>
     </main>
   );
 }
