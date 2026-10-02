@@ -9,21 +9,29 @@ Spec de diseño del v1 (fuente de verdad):
 
 Stack: Next.js (App Router) + Postgres + Drizzle.
 
+**Hay dos bases.** `DATABASE_URL` tiene los datos reales y es contra la que corre
+la app. `TEST_DATABASE_URL` es donde corren `db:seed`, `db:verify` y `db:plan`:
+el seed trunca todo y los verificadores esperan encontrar solo lo que el seed
+dejó, así que no pueden tocar la base real.
+
 ## Puesta en marcha
 
 ```bash
 npm install
-createdb smart_money
-cp .env.example .env.local   # ajustar DATABASE_URL
-npm run db:migrate           # esquema + triggers del invariante
-npm run db:seed              # datos reales al 1-oct-2026 (no pisa datos cargados)
+createdb smart_money         # los datos reales
+createdb smart_money_test    # donde corren las pruebas
+cp .env.example .env.local   # ajustar las dos URLs
+npm run db:migrate           # esquema + triggers, en la base real
+npm run db:migrate:test      # lo mismo en la de pruebas
+npm run db:seed              # datos del 1-oct-2026, en la de PRUEBAS
 npm run dev
 ```
 
 | Script | Qué hace |
 | --- | --- |
 | `npm run db:generate` | genera una migración desde `src/db/schema.ts` |
-| `npm run db:migrate` | aplica las migraciones pendientes |
+| `npm run db:migrate` | aplica las migraciones pendientes a la base real |
+| `npm run db:migrate:test` | lo mismo, sobre la base de pruebas |
 | `npm run db:seed` | carga los datos reales al 1-oct-2026 y verifica los números contra la spec. **Se niega a correr si hay movimientos cargados**: usá `npm run db:seed -- --force` para borrarlos y empezar de cero |
 | `npm run db:verify` | prueba los 3 casos raros de §8 contra el invariante real |
 | `npm run db:plan` | corre el motor del planner y lo compara con el plan de §5 |

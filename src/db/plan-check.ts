@@ -14,7 +14,7 @@ import { computePlan } from "./planner";
 import * as schema from "./schema";
 
 async function main() {
-  const client = postgres(loadEnv(), { max: 1 });
+  const client = postgres(loadEnv({ scratch: true }), { max: 1 });
   const db = drizzle(client, { schema });
   let failures = 0;
 

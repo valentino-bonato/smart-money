@@ -1,6 +1,8 @@
 import { defineConfig } from "drizzle-kit";
 import { loadEnv } from "./src/db/env";
 
+// Las migraciones van a la base que diga DATABASE_URL. `db:migrate` apunta a
+// la real; `db:migrate:test` la sobreescribe con la de pruebas.
 loadEnv();
 
 export default defineConfig({

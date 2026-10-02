@@ -32,7 +32,7 @@ import {
 import * as schema from "./schema";
 
 async function main() {
-  const url = loadEnv();
+  const url = loadEnv({ scratch: true });
   const client = postgres(url, { max: 1 });
   const db = drizzle(client, { schema });
 
@@ -133,6 +133,29 @@ async function main() {
         type: "asset" as const,
         currency: "USD" as const,
         institution: "Cocos Capital",
+      },
+      // La caja de ahorro en dólares del BBVA: ahí van los dólares con los que
+      // se paga el lado en USD del resumen de la tarjeta.
+      {
+        name: "BBVA caja de ahorro en dólares",
+        type: "asset" as const,
+        currency: "USD" as const,
+        institution: "BBVA",
+      },
+      // Ualá es solo el lugar donde se compran los dólares: entran pesos, se
+      // cambian y salen. Son dos cuentas por la misma razón que Cocos, y las
+      // dos quedan en cero después de cada compra.
+      {
+        name: "Ualá",
+        type: "asset" as const,
+        currency: "ARS" as const,
+        institution: "Ualá",
+      },
+      {
+        name: "Ualá en dólares",
+        type: "asset" as const,
+        currency: "USD" as const,
+        institution: "Ualá",
       },
       // §8, gasto compartido con reembolso: si se pagan 100.000 y devuelven
       // 75.000, cargar gasto 100.000 + ingreso 75.000 distorsiona el promedio
@@ -804,7 +827,7 @@ async function main() {
         recurring: "Notion",
       },
       {
-        amount: "2",
+        amount: "1.82",
         payee: "YouTube Premium",
         expense: "Gastos:Suscripciones",
         envelope: "Suscripciones",
@@ -1028,14 +1051,15 @@ async function main() {
     join accounts a on a.id = e.account_id
     where a.name = 'Tarjeta de crédito BBVA — USD'
   `);
-  expect("resumen en dólares a pagar", row(usdCard)[0].total, "-221");
+  // 77 del hostel + 100 de Claude + 42 de Notion + 1,82 de YouTube.
+  expect("resumen en dólares a pagar", row(usdCard)[0].total, "-220.82");
 
   const monthlyUsd = await db.execute<{ total: string }>(dsql`
     select sum(e.amount)::text as total
     from entries e join accounts a on a.id = e.account_id
     where a.type = 'expense' and e.currency = 'USD'
   `);
-  expect("gasto en dólares de octubre", row(monthlyUsd)[0].total, "221");
+  expect("gasto en dólares de octubre", row(monthlyUsd)[0].total, "220.82");
 
   // Lo que queda sin propósito despues de aprobar el piso: los 200.000 del
   // resumen de la tarjeta (que no es un sobre) + los 15.000 que ya estaban en
@@ -1045,13 +1069,13 @@ async function main() {
   // El pool en USD da 221 justo porque la fórmula de §6 no mira los pasivos:
   // son los dólares del fondo que van a pagar el resumen, y que ningún sobre
   // reclama. Mismo efecto que los 200.000 del resumen en pesos.
-  expect("pool sin asignar post-plan (USD)", pool[1].pool, "221");
+  expect("pool sin asignar post-plan (USD)", pool[1].pool, "220.82");
 
   const worth = await netWorth(db, { in: "ARS", rate: USD_ARS, from: "USD" });
   // §5 da 8.358.100 porque no resta ninguna deuda de tarjeta y redondea el
-  // tramo USD. Restando los dos resúmenes a pagar — 200.000 ARS y 221 USD, que
-  // a 1.550 son 342.550 — y con el dólar exacto: 7.815.800.
-  expect("patrimonio total (ARS)", worth, "7815800");
+  // tramo USD. Restando los dos resúmenes a pagar — 200.000 ARS y 220,82 USD —
+  // y con el dólar exacto a 1.550: 7.816.079.
+  expect("patrimonio total (ARS)", worth, "7816079");
 
   const invariant = await db.execute(dsql`
     select count(*)::int as unbalanced from (

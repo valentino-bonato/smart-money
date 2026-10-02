@@ -35,8 +35,21 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
 - `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec.
   **TRUNCA todo**, así que se niega a correr si hay movimientos cargados; hay
-  que pedirlo con `npm run db:seed -- --force`. Antes de la guarda, correrlo
-  mientras se verificaba algo borraba lo que el usuario había cargado a mano.
+  que pedirlo con `npm run db:seed -- --force`.
+
+## Dos bases, no una
+
+- **`DATABASE_URL`** → `smart_money`, los datos reales. Acá corre la app y
+  `db:migrate`.
+- **`TEST_DATABASE_URL`** → `smart_money_test`. Acá y solo acá corren
+  `db:seed`, `db:verify`, `db:plan` y `db:reset` (`loadEnv({ scratch: true })`).
+
+No es una preferencia: el seed trunca todo y los verificadores asumen que la
+base tiene exactamente lo que el seed dejó. Contra la base real una de dos cosas
+pasa — o le borran los movimientos al usuario, o fallan porque encuentran
+movimientos que no esperaban. Las dos ya pasaron.
+
+Para migrar la de pruebas: `npm run db:migrate:test`.
 - `BACKLOG.md` — lo pendiente, con el motivo de cada cosa
 
 `income_sources.account_id` vincula cada fuente con su cuenta de ingreso. Es por
@@ -115,8 +128,8 @@ Invariantes del motor, cada uno con su assert en `npm run db:plan`:
 - **Recalcular un período excluye el plan de ese período.** Si no, su propio
   aporte cuenta como progreso de la meta y el catch-up sale más bajo: el mes se
   cuenta pendiente y pagado a la vez.
-- **Del resumen de tarjeta solo entra la parte que ningún sobre cubre.** Los 221
-  USD de octubre ya salieron de sus sobres al consumirse (el hostel del Viaje,
+- **Del resumen de tarjeta solo entra la parte que ningún sobre cubre.** Los
+  220,82 USD de octubre ya salieron de sus sobres al consumirse (el hostel del Viaje,
   las suscripciones de Suscripciones); pedirle al piso otros 221 reservaría la
   misma plata dos veces. Los 200.000 en pesos vienen del saldo de apertura y no
   tienen sobre detrás: esos sí.
@@ -290,8 +303,8 @@ el signo de nada.
   empezara el mes. Si van al 1-oct, los 703 USD del viaje aparecen como
   "asignado este mes" y cualquier cuenta por período los cuenta dos veces.
 - La tarjeta abre con −200.000 ARS (el resumen de §5, que la tabla de saldos de
-  apertura de la spec no lista) y −221 USD (hostel 77 + Claude 100 + Notion 42
-  + YouTube 2, cargados como transacciones con su sobre).
+  apertura de la spec no lista) y −220,82 USD (hostel 77 + Claude 100 + Notion
+  42 + YouTube 1,82, cargados como transacciones con su sobre).
 - El plan de octubre está aprobado, pero solo las líneas del **nivel piso**
   generaron allocation. Las del nivel variable quedan como propuesta: los
   4.780.000 de consultoría y los 1.200.000 del hito están en
@@ -302,9 +315,9 @@ el signo de nada.
   viaje recibe 1.044.579 del piso y los 232.421 que faltan salen del nivel
   variable. No sobra nada para el fondo de emergencia. En un mes flojo de
   consultoría, la meta con fecha dura queda corta.
-- `pool_sin_asignar` = 215.000 ARS y 221 USD. Los dos son resúmenes a pagar que
+- `pool_sin_asignar` = 215.000 ARS y 220,82 USD. Los dos son resúmenes a pagar que
   ningún sobre reclama: la fórmula de §6 no mira los pasivos.
-- Patrimonio: 7.815.800 ARS.
+- Patrimonio: 7.816.079 ARS.
 
 ## Escribir en el libro contable
 

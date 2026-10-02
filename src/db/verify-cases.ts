@@ -47,7 +47,7 @@ import { prepareRecurringCharges } from "./recurring";
 import * as schema from "./schema";
 
 async function main() {
-  const client = postgres(loadEnv(), { max: 1 });
+  const client = postgres(loadEnv({ scratch: true }), { max: 1 });
   const db = drizzle(client, { schema });
 
   const DATE = "2026-10-05";
@@ -457,9 +457,9 @@ async function main() {
       String(accounts.filter((a) => a.name.startsWith("Equity:")).length),
       "0",
     );
-    // 6 de activo (incluye "Me deben", que no tiene homebanking pero se
-    // concilia a mano igual) + las 2 tarjetas.
-    check("cuentas conciliables", String(accounts.length), "8");
+    // 9 de activo (incluye "Me deben", que no tiene homebanking pero se
+    // concilia a mano igual, y las dos de Ualá) + las 2 tarjetas.
+    check("cuentas conciliables", String(accounts.length), "11");
 
     // Caso 1 · pegar el saldo exacto: tiene que cerrar.
     const exact = await recordReconciliation(db, {
@@ -499,7 +499,7 @@ async function main() {
       balances: [
         {
           accountId: byName("Tarjeta de crédito BBVA — USD").accountId,
-          statementBalance: "-221",
+          statementBalance: "-220.82",
         },
       ],
     });
@@ -560,7 +560,7 @@ async function main() {
     // El caso real: el Notion de 42 dejó Suscripciones en -144 USD contra
     // 113,82 asignados. Primero se pasan a dólares los pesos del sobre, y
     // después se cubren los 30,18 que faltan desde Puntuales del mes.
-    check("Suscripciones USD antes", await envelopeBalance("Suscripciones", "USD"), "-144");
+    check("Suscripciones USD antes", await envelopeBalance("Suscripciones", "USD"), "-143.82");
     check("Suscripciones ARS antes", await envelopeBalance("Suscripciones", "ARS"), "176421");
 
     allocs.push(
@@ -575,21 +575,23 @@ async function main() {
       })),
     );
     check("Suscripciones ARS después de pasar a USD", await envelopeBalance("Suscripciones", "ARS"), "0");
-    check("Suscripciones USD después de pasar a USD", await envelopeBalance("Suscripciones", "USD"), "-30.18");
+    // 176.421 ARS a 1.550 son exactamente 113,82 USD, así que el sobre pasa a
+    // deber 30 redondos: 143,82 gastados contra 113,82 asignados.
+    check("Suscripciones USD después de pasar a USD", await envelopeBalance("Suscripciones", "USD"), "-30");
 
     // Cubrir el faltante desde otro sobre: dos filas.
     allocs.push(
       ...(await moveBetweenEnvelopes(db, {
         fromEnvelopeId: env("Puntuales del mes"),
         toEnvelopeId: env("Suscripciones"),
-        amount: "30.18",
+        amount: "30",
         currency: "USD",
         date: DATE,
         note: "Cubro el Notion atípico",
       })),
     );
     check("Suscripciones queda en cero", await envelopeBalance("Suscripciones", "USD"), "0");
-    check("Puntuales queda en -30,18 USD", await envelopeBalance("Puntuales del mes", "USD"), "-30.18");
+    check("Puntuales queda en -30 USD", await envelopeBalance("Puntuales del mes", "USD"), "-30");
     // Y sus pesos no se tocaron: el sobre tiene saldo POR moneda.
     check("Puntuales conserva sus pesos", await envelopeBalance("Puntuales del mes", "ARS"), "200000");
 
@@ -761,7 +763,7 @@ async function main() {
     check(
       "octubre · deuda en dólares sin cambios",
       await balance("Tarjeta de crédito BBVA — USD"),
-      "-221",
+      "-220.82",
     );
     check(
       "octubre · sobre Inglés consumido",
@@ -807,7 +809,7 @@ async function main() {
     check(
       "noviembre · deuda sin cambios",
       await balance("Tarjeta de crédito BBVA — USD"),
-      "-334.82",
+      "-334.64",
     );
   }
 
@@ -885,7 +887,7 @@ async function main() {
   // acá, que es el punto de §8.
   check("gasto del mes en ARS", totalBy("ARS"), "301000");
   // En USD, el resumen de la tarjeta que trae el seed: 77 + 100 + 42 + 2.
-  check("gasto del mes en USD", totalBy("USD"), "221");
+  check("gasto del mes en USD", totalBy("USD"), "220.82");
 
   /* --------------------------------------------------------------- limpieza */
   console.log("\n### Limpieza");
@@ -905,12 +907,12 @@ async function main() {
   check("transacciones desbalanceadas", String(unbalanced), "0");
   check("BBVA caja de ahorro restaurado", await balance("BBVA caja de ahorro"), "2691000");
   check("Tarjeta ARS restaurada", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
-  check("Tarjeta USD intacta", await balance("Tarjeta de crédito BBVA — USD"), "-221");
+  check("Tarjeta USD intacta", await balance("Tarjeta de crédito BBVA — USD"), "-220.82");
   check("Equity:FX:ARS restaurado", await balance("Equity:FX:ARS"), "0");
   check(
     "sobre Suscripciones restaurado (USD)",
     await envelopeBalance("Suscripciones", "USD"),
-    "-144",
+    "-143.82",
   );
   // 2.545.100 y no 5.499.100: la línea de CEDEARs del plan es del nivel
   // variable, así que todavía no generó allocation. Solo está la apertura.

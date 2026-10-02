@@ -1,12 +1,15 @@
 /**
- * Borra el esquema completo para poder correr las migraciones de cero.
- * Destructivo: solo para desarrollo local.
+ * Borra el esquema completo de la base de PRUEBAS para correr las migraciones
+ * de cero. Destructivo.
+ *
+ * Nunca toca la base real: para eso hay que apuntar DATABASE_URL a mano y
+ * saber lo que se está haciendo.
  */
 import postgres from "postgres";
 import { loadEnv } from "./env";
 
 async function main() {
-  const sql = postgres(loadEnv(), { max: 1 });
+  const sql = postgres(loadEnv({ scratch: true }), { max: 1 });
   await sql.unsafe(`
     drop schema if exists public cascade;
     create schema public;
