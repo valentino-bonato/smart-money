@@ -127,9 +127,12 @@ async function main() {
     );
   }
 
-  // Todo peso asignado tiene un destino: la suma de las transferencias más los
-  // pagos tiene que dar el total del plan.
-  const planTotal = plan.lines.reduce(
+  // Todo peso PENDIENTE tiene un destino: la suma de las transferencias más los
+  // pagos tiene que dar el total de lo que todavía no se aplicó. Las líneas ya
+  // aplicadas no generan transferencia — esa plata ya se movió.
+  const planTotal = plan.lines
+    .filter((l) => !l.alreadyApplied)
+    .reduce(
     (acc, l) =>
       acc +
       BigInt(
@@ -142,7 +145,7 @@ async function main() {
   const balanced = transferTotal === planTotal;
   if (!balanced) failures++;
   console.log(
-    `  ${balanced ? "✓" : "✗"} las transferencias cubren todo el plan: ${money(
+    `  ${balanced ? "✓" : "✗"} las transferencias cubren todo lo pendiente: ${money(
       (Number(transferTotal) / 10000).toString(),
     )}${balanced ? "" : ` vs plan ${money((Number(planTotal) / 10000).toString())}`}`,
   );

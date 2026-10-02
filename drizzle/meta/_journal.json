@@ -43,6 +43,13 @@
       "when": 1790896728630,
       "tag": "0005_powerful_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790962389740,
+      "tag": "0006_tired_bullseye",
+      "breakpoints": true
     }
   ]
 }

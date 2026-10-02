@@ -104,13 +104,19 @@ export default async function PlanPage({
                 {title}
               </h2>
               <span className="text-sm tabular-nums opacity-70">
-                {formatMoney(available, "ARS")}
-                <span className="opacity-60">
-                  {" "}
-                  {computed.availableSource[tier] === "expected"
-                    ? "esperado"
-                    : "cobrado"}
-                </span>
+                {computed.applied[tier] ? (
+                  "ya aplicado"
+                ) : (
+                  <>
+                    {formatMoney(available, "ARS")}
+                    <span className="opacity-60">
+                      {" "}
+                      {computed.availableSource[tier] === "expected"
+                        ? "esperado"
+                        : "cobrado"}
+                    </span>
+                  </>
+                )}
               </span>
             </div>
             {lines.length === 0 ? (
@@ -120,7 +126,12 @@ export default async function PlanPage({
             ) : (
               <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
                 {lines.map((l) => (
-                  <li key={l.sequence} className="py-2 flex flex-col">
+                  <li
+                    key={l.sequence}
+                    className={`py-2 flex flex-col ${
+                      l.alreadyApplied ? "opacity-45" : ""
+                    }`}
+                  >
                     <div className="flex items-baseline justify-between gap-3">
                       <span>
                         {l.envelopeName ?? (
@@ -139,6 +150,12 @@ export default async function PlanPage({
                 ))}
               </ul>
             )}
+            {computed.applied[tier] ? (
+              <p className="text-xs opacity-55">
+                Ya aprobado: esta plata tiene destino y no vuelve a aparecer en
+                las transferencias. Para rehacerlo, deshacé la aprobación abajo.
+              </p>
+            ) : null}
             {Number(leftover) > 0 ? (
               <p className="text-xs opacity-60">
                 Queda sin asignar {formatMoney(leftover, "ARS")}.
@@ -152,8 +169,14 @@ export default async function PlanPage({
           concretas. Sin esto el plan obliga a sentarse a calcular. */}
       <section className="flex flex-col gap-2">
         <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Transferencias a ejecutar
+          Transferencias pendientes
         </h2>
+        {payments.length === 0 && computed.transfers.length === 0 ? (
+          <p className="text-sm opacity-60">
+            Nada pendiente: lo que el plan asignó ya tiene destino y no hay
+            resúmenes por pagar.
+          </p>
+        ) : null}
         <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
           {payments.map((l) => (
             <li

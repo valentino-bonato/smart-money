@@ -250,6 +250,13 @@ export const allocations = pgTable(
     amount: numeric("amount", { precision: 20, scale: 4 }).notNull(),
     currency: currency("currency").notNull(),
     planId: uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }),
+    // Qué línea del plan materializó esta asignación. Sin esto no se puede
+    // saber qué parte del plan ya se aplicó, y replanificar el mes vuelve a
+    // proponer lo que ya se hizo. Matchear por sobre no alcanza: el viaje
+    // tiene una línea en el piso y otra en el nivel variable.
+    planLineId: uuid("plan_line_id").references((): AnyPgColumn => planLines.id, {
+      onDelete: "set null",
+    }),
     note: text("note"),
   },
   (t) => [
@@ -468,6 +475,10 @@ export const entriesRelations = relations(entries, ({ one }) => ({
 }));
 
 export const allocationsRelations = relations(allocations, ({ one }) => ({
+  planLine: one(planLines, {
+    fields: [allocations.planLineId],
+    references: [planLines.id],
+  }),
   envelope: one(envelopes, {
     fields: [allocations.envelopeId],
     references: [envelopes.id],

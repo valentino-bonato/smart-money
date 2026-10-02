@@ -150,6 +150,20 @@ Invariantes del motor, cada uno con su assert en `npm run db:plan`:
 - **Recalcular un período excluye el plan de ese período.** Si no, su propio
   aporte cuenta como progreso de la meta y el catch-up sale más bajo: el mes se
   cuenta pendiente y pagado a la vez.
+- **Un nivel ya aplicado no se recalcula: se emite tal cual.** §4 pide
+  replanificación incremental, "el planner agrega líneas del nivel 2 sin tocar
+  las del piso". Sin esto, abrir el plan a mitad de mes vuelve a proponer las
+  transferencias que ya se hicieron, y la primera vez que se abre con datos
+  reales se pierde la confianza. Un nivel está aplicado si alguna de sus líneas
+  tiene su asignación creada, por `allocations.plan_line_id` — **no** por sobre:
+  el viaje tiene una línea en el piso y otra en el variable, así que matchear
+  por sobre daría uno de los dos mal.
+- **El pago del resumen se calcula siempre del saldo actual**, aplicado o no.
+  Aprobar un plan no paga nada, así que la línea sigue hasta que la deuda se
+  cancele de verdad — y desaparece sola cuando se paga.
+- **El faltante de una meta con fecha dura se calcula igual con el piso
+  aplicado**, comparando el catch-up contra lo que las líneas guardadas ya le
+  dieron. Es lo que el nivel variable tiene que completar.
 - **Del resumen de tarjeta solo entra la parte que ningún sobre cubre.** Los
   220,82 USD de octubre ya salieron de sus sobres al consumirse (el hostel del Viaje,
   las suscripciones de Suscripciones); pedirle al piso otros 221 reservaría la
@@ -159,7 +173,7 @@ Invariantes del motor, cada uno con su assert en `npm run db:plan`:
   es la única excepción: el sueldo es fijo y cae el día 1, así que si todavía no
   hay asiento se usa `expected_amount` — y `availableSource` lo dice. Aprobar
   materializa allocations solo de los niveles cuyo cobro entró.
-- **La suma de las transferencias es igual al total del plan.** Todo peso
+- **La suma de las transferencias es igual al total de lo PENDIENTE.** Todo peso
   asignado tiene un destino (`envelopes.settlement_account_id`), incluso cuando
   el destino es la cuenta donde ya está.
 

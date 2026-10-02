@@ -57,6 +57,11 @@ export type PlannedLine = {
   tier: Tier;
   ruleApplied: string;
   sequence: number;
+  /**
+   * true si esta línea ya se aprobó y generó su asignación. No se recalcula y
+   * no entra en las transferencias pendientes: ya está hecha.
+   */
+  alreadyApplied: boolean;
 };
 
 export type PlannedTransfer = {
@@ -84,6 +89,8 @@ export type ComputedPlan = {
    * se usa el esperado. Los niveles variables son siempre `received`.
    */
   availableSource: Record<Tier, "received" | "expected">;
+  /** Niveles que ya se aprobaron y materializaron en este período. */
+  applied: Record<Tier, boolean>;
   lines: PlannedLine[];
   /** Cobros registrados y todavía no recibidos: se muestran, no se asignan. */
   expected: {
@@ -190,19 +197,43 @@ export async function computePlan(
     availableSource[tier] = derived.source;
   }
 
+  // Lo que este período ya aprobó y materializó. §4 pide replanificación
+  // incremental: "el planner agrega líneas del nivel 2 sin tocar las del piso".
+  // Sin esto, abrir el plan a mitad de mes vuelve a proponer las
+  // transferencias que ya se hicieron.
+  const stored = excludePlanId
+    ? await storedLines(db, excludePlanId)
+    : { lines: [], applied: {} as Record<Tier, boolean> };
+  const applied: Record<Tier, boolean> = {
+    base: stored.applied.base ?? false,
+    recurring_variable: stored.applied.recurring_variable ?? false,
+    milestone: stored.applied.milestone ?? false,
+  };
+
   const lines: PlannedLine[] = [];
   let sequence = 0;
-  const push = (line: Omit<PlannedLine, "sequence">) => {
+  const push = (line: Omit<PlannedLine, "sequence" | "alreadyApplied">) => {
     if (toMinor(line.amount) === 0n) return;
-    lines.push({ ...line, sequence: ++sequence });
+    lines.push({ ...line, alreadyApplied: false, sequence: ++sequence });
+  };
+  /** Las líneas ya aplicadas de un nivel, tal como quedaron guardadas. */
+  const pushApplied = (tier: Tier) => {
+    for (const l of stored.lines.filter((x) => x.tier === tier)) {
+      lines.push({ ...l, alreadyApplied: true, sequence: ++sequence });
+    }
   };
 
   /* ------------------------------------------------- nivel 1 · el piso --- */
-  let floor = toMinor(available.base);
+  // Si el piso ya se aplicó, sus líneas se emiten tal cual y no se recalculan.
+  let floor = applied.base ? 0n : toMinor(available.base);
 
   // 1. El resumen de la tarjeta, por su monto real. No es una asignación:
   //    los consumos ya se tagearon a su sobre al consumirse, así que reservar
   //    un sobre para el resumen contaría doble.
+  // El pago del resumen se calcula siempre del saldo actual, aplicado o no:
+  // aprobar un plan no paga nada, así que la línea sigue ahí hasta que la
+  // deuda se cancele. Y se mantiene sola: cuando se paga, el saldo baja y la
+  // línea desaparece.
   for (const card of await untaggedCardDebt(db, opts.userId)) {
     const owed = toMinor(card.owed);
     if (owed <= 0n) continue;
@@ -221,8 +252,12 @@ export async function computePlan(
     floor -= inArs;
   }
 
+  // Lo ya aplicado se emite después del pago, que es la primera línea de la
+  // cascada de §4.
+  if (applied.base) pushApplied("base");
+
   // 2. Las obligaciones fijas, en el orden del sobre.
-  for (const e of envelopes) {
+  for (const e of applied.base ? [] : envelopes) {
     if (e.contributionRule !== "fixed" || !e.contributionAmount) continue;
     const amount =
       e.contributionCurrency === "USD"
@@ -245,7 +280,7 @@ export async function computePlan(
   }
 
   // 3. Los puntuales del mes.
-  for (const extra of opts.extras ?? []) {
+  for (const extra of applied.base ? [] : (opts.extras ?? [])) {
     const e = envelopes.find((x) => x.id === extra.envelopeId);
     push({
       envelopeId: extra.envelopeId,
@@ -274,6 +309,18 @@ export async function computePlan(
         ? usdToArs(goal.suggestedContribution, opts.rate)
         : goal.suggestedContribution,
     );
+
+    // Con el piso ya aplicado no se recalcula nada, pero igual hay que saber
+    // si quedó corto: ese faltante es lo que el nivel variable tiene que
+    // completar, y es la única meta que no puede quedarse corta.
+    if (applied.base) {
+      const already = stored.lines
+        .filter((l) => l.envelopeId === e.id && l.tier === "base")
+        .reduce((acc, l) => acc + toMinor(l.amount), 0n);
+      if (already < wanted) shortfall.set(e.id, wanted - already);
+      continue;
+    }
+
     const given = floor > 0n ? (wanted < floor ? wanted : floor) : 0n;
     if (given > 0n) {
       push({
@@ -303,7 +350,7 @@ export async function computePlan(
       e.targetDate === null &&
       e.contributionRule !== "remainder",
   );
-  if (reserve && floor > 0n) {
+  if (reserve && !applied.base && floor > 0n) {
     push({
       envelopeId: reserve.id,
       envelopeName: reserve.name,
@@ -324,8 +371,14 @@ export async function computePlan(
     toMinor(available.milestone) > toMinor(available.recurring_variable)
       ? "milestone"
       : "recurring_variable";
-  let variable =
-    toMinor(available.recurring_variable) + toMinor(available.milestone);
+  const variableApplied = applied.recurring_variable || applied.milestone;
+  if (variableApplied) {
+    pushApplied("recurring_variable");
+    pushApplied("milestone");
+  }
+  let variable = variableApplied
+    ? 0n
+    : toMinor(available.recurring_variable) + toMinor(available.milestone);
 
   // 1. Completar el fondo de emergencia hasta su objetivo.
   if (reserve && variable > 0n) {
@@ -428,6 +481,7 @@ export async function computePlan(
     rate: opts.rate,
     available,
     availableSource,
+    applied,
     lines,
     expected,
     transfers,
@@ -440,6 +494,70 @@ export async function computePlan(
         variableTier === "milestone" && variable > 0n ? variable : 0n,
       ),
     },
+  };
+}
+
+/**
+ * Las líneas guardadas de un plan, y qué niveles ya se materializaron.
+ *
+ * Un nivel está aplicado si alguna de sus líneas tiene su asignación creada.
+ * Aprobar materializa niveles enteros, así que con una alcanza.
+ *
+ * El vínculo es `allocations.plan_line_id` y no el sobre: el viaje tiene una
+ * línea en el piso y otra en el nivel variable, así que matchear por sobre
+ * daría el piso como aplicado cuando se aplicó el variable, o al revés.
+ */
+async function storedLines(
+  db: Executor,
+  planId: string,
+): Promise<{
+  lines: Omit<PlannedLine, "sequence" | "alreadyApplied">[];
+  applied: Record<Tier, boolean>;
+}> {
+  type Row = {
+    envelopeId: string | null;
+    envelopeName: string | null;
+    amount: string;
+    currency: Currency;
+    tier: Tier;
+    ruleApplied: string | null;
+    materialized: boolean;
+  };
+  const rows = (await db.execute<Row>(sql`
+    select
+      l.envelope_id   as "envelopeId",
+      e.name          as "envelopeName",
+      l.amount::text  as amount,
+      l.currency      as currency,
+      l.tier          as tier,
+      l.rule_applied  as "ruleApplied",
+      exists (select 1 from allocations al where al.plan_line_id = l.id)
+                      as materialized
+    from plan_lines l
+    left join envelopes e on e.id = l.envelope_id
+    where l.plan_id = ${planId}
+    order by l.sequence
+  `)) as unknown as Row[];
+
+  const applied = {} as Record<Tier, boolean>;
+  for (const r of rows) if (r.materialized) applied[r.tier] = true;
+
+  return {
+    // Las líneas de pago no se devuelven: el pago del resumen se recalcula
+    // siempre del saldo real de la tarjeta.
+    lines: rows
+      .filter((r) => r.envelopeId !== null && applied[r.tier])
+      .map((r) => ({
+        envelopeId: r.envelopeId,
+        envelopeName: r.envelopeName,
+        accountId: null,
+        accountName: null,
+        amount: r.amount,
+        currency: r.currency,
+        tier: r.tier,
+        ruleApplied: r.ruleApplied ?? "",
+      })),
+    applied,
   };
 }
 
@@ -605,6 +723,7 @@ async function computeTransfers(
 
   const byAccount = new Map<string, PlannedTransfer>();
   for (const line of opts.lines) {
+    if (line.alreadyApplied) continue; // ya se hizo, no hay nada que transferir
     if (!line.envelopeId) continue; // las líneas de pago se listan aparte
     const route = routes.find((r) => r.envelopeId === line.envelopeId);
     if (!route) continue;
@@ -727,6 +846,9 @@ export async function approvePlan(
           amount: l.amount,
           currency: l.currency,
           planId: opts.planId,
+          // El vínculo con la línea es lo que después deja saber qué parte del
+          // plan ya se aplicó, para no volver a proponerla.
+          planLineId: l.id,
           note: l.ruleApplied,
         })),
       );

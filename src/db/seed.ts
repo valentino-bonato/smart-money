@@ -884,6 +884,9 @@ async function main() {
           amount: l.amount,
           currency: l.currency,
           planId: plan.id,
+          // El vínculo con la línea es lo que deja saber qué parte del plan ya
+          // se aplicó, para no volver a proponerla al replanificar.
+          planLineId: l.id,
           note: l.ruleApplied,
         })),
     );
