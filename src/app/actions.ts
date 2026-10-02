@@ -1,7 +1,9 @@
 "use server";
 
+import { and, eq, like } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
+import * as schema from "@/db/schema";
 import { recordExpense } from "@/db/ledger";
 import { MoneyParseError, parseAmountInput } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
@@ -79,4 +81,41 @@ export async function recordExpenseAction(
       message: (e.cause?.message ?? e.message).split("\n")[0],
     };
   }
+}
+
+/**
+ * Borra un movimiento entero. Las partidas se van por cascada y el constraint
+ * trigger deferido valida al COMMIT con el asiento ya vacío, así que no hay
+ * estado intermedio desbalanceado.
+ *
+ * El saldo de apertura no se puede borrar: es el punto de partida de todo el
+ * libro, y borrarlo deja cada cuenta en cero sin que se note hasta que algo no
+ * cuadra. Para eso está `npm run db:seed`.
+ */
+export async function deleteTransactionAction(form: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  const id = String(form.get("id") ?? "");
+  if (!id) return;
+
+  const [opening] = await db
+    .select({ id: schema.entries.id })
+    .from(schema.entries)
+    .innerJoin(schema.accounts, eq(schema.accounts.id, schema.entries.accountId))
+    .where(
+      and(
+        eq(schema.entries.transactionId, id),
+        like(schema.accounts.name, "Equity:Opening%"),
+      ),
+    )
+    .limit(1);
+  if (opening) {
+    throw new Error("El saldo de apertura no se borra desde acá.");
+  }
+
+  await db
+    .delete(schema.transactions)
+    .where(
+      and(eq(schema.transactions.id, id), eq(schema.transactions.userId, user.id)),
+    );
+  refresh();
 }

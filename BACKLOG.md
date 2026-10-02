@@ -15,6 +15,33 @@ salió de una decisión concreta que se tomó o se postergó.
      para Vercel; hace falta una Postgres administrada y las variables de
      entorno.
 
+## Corregir lo cargado
+
+**Reportado el 2-oct-2026:** una transferencia hecha sin querer a la cuenta
+equivocada, sin forma de volver atrás.
+
+Se construyó lo mínimo — **borrar un movimiento** desde la lista de últimos
+movimientos — porque sin eso un monto mal tipeado durante la carga queda para
+siempre, y §8 dice que el historial a medias es peor que no tener app. Falta
+todo lo demás:
+
+- **Editar un movimiento**: cambiarle el monto, la fecha o el comercio sin
+  borrarlo y volver a cargarlo. El caso frecuente es el de §8: la suscripción
+  se carga con el precio de lista y se corrige con el monto real del resumen.
+- **Cambiar la categoría o el sobre** de un gasto ya cargado. Hoy implica
+  borrarlo y rehacerlo, que además pierde la sugerencia por comercio.
+- **Editar una transferencia o un cambio de moneda.** El cambio es el más
+  delicado: tiene cuatro partidas y, si fue para un sobre, además una
+  conversión de asignación que hay que deshacer junto.
+- **Deshacer un movimiento de sobres** (una asignación mal hecha). Hoy se
+  arregla moviendo en sentido contrario, lo que deja las dos filas en el
+  historial.
+- **Confirmación proporcional.** Borrar el saldo de apertura rompe todo, así
+  que hoy directamente no se ofrece. Editar en vez de borrar lo vuelve menos
+  grave.
+
+Lo que ya existe: deshacer la aprobación de un plan, desde `/plan`.
+
 ## Del v1, sin construir
 
 - **Paso 7 · chat sobre el plan.** La capa conversacional con la Claude API,

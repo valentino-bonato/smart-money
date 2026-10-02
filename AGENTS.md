@@ -219,6 +219,21 @@ Decisiones que no conviene deshacer sin motivo:
 En Next 16: `refresh()` de `next/cache` para refrescar después de mutar (no
 `revalidatePath`), y el layout recibe `LayoutProps<"/">` tipado.
 
+## Corregir lo cargado
+
+Hoy solo se puede **borrar** un movimiento, desde la lista de últimos
+movimientos (`delete-button.tsx` + `deleteTransactionAction`). El resto de la
+historia — editar monto, cambiar categoría o sobre — está en `BACKLOG.md`.
+
+- Las partidas se van por cascada y el constraint trigger deferido valida al
+  COMMIT con el asiento ya vacío: no hay estado intermedio desbalanceado. Vale
+  igual para un cambio de moneda, que son cuatro partidas en dos monedas.
+- **El saldo de apertura no se borra.** Es el punto de partida del libro, y
+  borrarlo deja cada cuenta en cero sin que se note hasta que algo no cuadra.
+  La acción lo rechaza y la lista ni ofrece el botón.
+- Borrar pide un segundo clic, con el mismo botón cambiando. Un `confirm()` en
+  una lista que se recorre rápido se acepta sin leer.
+
 ## Parseo de montos
 
 `parseAmountInput` en `src/lib/money.ts`. La coma es el separador decimal; un

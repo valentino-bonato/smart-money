@@ -5,6 +5,7 @@ import * as schema from "@/db/schema";
 import { accountBalances, rateForView, recentTransactions } from "@/db/queries";
 import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
+import { DeleteButton } from "../delete-button";
 import { MoveMoneyForm } from "./move-money-form";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +128,7 @@ export default async function MoverPage() {
                     </span>
                   ))}
                 </span>
+                <DeleteButton id={t.id} />
               </li>
             ))}
           </ul>

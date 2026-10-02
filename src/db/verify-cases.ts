@@ -234,6 +234,74 @@ async function main() {
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
   }
 
+  /* --------------------------------------- borrar un movimiento --- */
+  // Si no se puede corregir, un monto mal tipeado queda para siempre y el
+  // planner come de un historial sucio. Borrar es lo mínimo.
+  console.log("\n### Borrar un movimiento");
+  {
+    const mpBefore = await balance("Mercado Pago");
+    const bbvaBefore = await balance("BBVA caja de ahorro");
+
+    // Una transferencia a la cuenta equivocada, como la que pasó de verdad.
+    const wrong = await recordTransfer(db, {
+      userId: user.id,
+      date: DATE,
+      amount: "80000",
+      currency: "ARS",
+      fromAccountId: acct("BBVA caja de ahorro"),
+      toAccountId: acct("Cocos Capital — CEDEARs"),
+      description: "Transferencia equivocada",
+    });
+    check(
+      "la transferencia salió de la caja de ahorro",
+      await balance("BBVA caja de ahorro"),
+      sumAmounts([bbvaBefore, "-80000"]),
+    );
+
+    await db
+      .delete(schema.transactions)
+      .where(eq(schema.transactions.id, wrong.id));
+    check(
+      "borrada · la caja de ahorro vuelve",
+      await balance("BBVA caja de ahorro"),
+      bbvaBefore,
+    );
+    check("borrada · Mercado Pago intacto", await balance("Mercado Pago"), mpBefore);
+
+    // El caso raro: un cambio de moneda son cuatro partidas y dos monedas.
+    // Borrarlo tiene que dejar las cuatro cuentas como estaban.
+    const fxArsAcc = await fxAccountFor(db, { userId: user.id, currency: "ARS" });
+    const fxUsdAcc = await fxAccountFor(db, { userId: user.id, currency: "USD" });
+    const usdBefore = await balance("Cocos Capital — fondo USD");
+    const badFx = await exchangeCurrency(db, {
+      userId: user.id,
+      date: DATE,
+      fromAccountId: acct("BBVA caja de ahorro"),
+      fromAmount: "155000",
+      fromCurrency: "ARS",
+      fromFxAccountId: fxArsAcc,
+      toAccountId: acct("Cocos Capital — fondo USD"),
+      toAmount: "100",
+      toCurrency: "USD",
+      toFxAccountId: fxUsdAcc,
+      description: "Cambio equivocado",
+    });
+    check("el cambio movió los dólares", await balance("Cocos Capital — fondo USD"), sumAmounts([usdBefore, "100"]));
+    await db
+      .delete(schema.transactions)
+      .where(eq(schema.transactions.id, badFx.id));
+    check(
+      "borrado · los dólares vuelven",
+      await balance("Cocos Capital — fondo USD"),
+      usdBefore,
+    );
+    check("borrado · Equity:FX:ARS en cero", await balance("Equity:FX:ARS"), "2000000");
+    const [{ left }] = await db.execute<{ left: string }>(dsql`
+      select count(*)::text as left from entries where transaction_id = ${badFx.id}
+    `);
+    check("borrado · no quedaron partidas sueltas", left, "0");
+  }
+
   /* ------------------------- comprar dólares para un sobre (UI) --- */
   // El caso que el plan de octubre pide de verdad: "Cocos fondo USD, mandar
   // 3.326.021 → comprar USD". Mueve cuentas Y la asignación del sobre, en una

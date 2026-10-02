@@ -9,6 +9,7 @@ import {
 } from "@/db/queries";
 import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
+import { DeleteButton } from "./delete-button";
 import { QuickEntry, type EnvelopeOption, type Option } from "./quick-entry";
 
 /** Siempre contra la base: es un solo usuario y los datos cambian al cargar. */
@@ -157,6 +158,8 @@ export default async function Page() {
                     <span className="opacity-40">—</span>
                   )}
                 </span>
+                {/* La apertura no se borra: es el punto de partida del libro. */}
+                {t.kind !== "apertura" ? <DeleteButton id={t.id} /> : null}
               </li>
             ))}
           </ul>
