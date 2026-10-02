@@ -7,7 +7,7 @@ import {
 } from "@/db/reconcile";
 import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
-import { resolveAction } from "./actions";
+import { adjustAction, ignoreAction } from "./actions";
 import { ReconcileForm } from "./reconcile-form";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +118,13 @@ export default async function ConciliacionPage() {
           <h2 className="text-xs uppercase tracking-wide opacity-60">
             Diferencias sin resolver
           </h2>
+          <p className="text-xs opacity-55">
+            <strong>Ajustar</strong> deja la cuenta en el saldo del homebanking
+            con un asiento de ajuste — para lo que no se arregla cargando un
+            movimiento, como la revalorización de los CEDEARs o una comisión.
+            <strong> Ignorar</strong> no toca nada: es para cuando ya sabés qué
+            falta y lo vas a cargar.
+          </p>
           <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
             {unresolved.map((h) => (
               <li
@@ -132,13 +139,29 @@ export default async function ConciliacionPage() {
                   <span className="tabular-nums text-red-600 dark:text-red-400">
                     {formatMoney(h.difference, h.currency, { sign: true })}
                   </span>
-                  <form action={resolveAction}>
+                  {/* Ajustar deja la cuenta en el saldo del homebanking con un
+                      asiento contra Equity:Ajustes. Ignorar no toca nada: es
+                      para cuando ya sabés qué falta y lo vas a cargar. */}
+                  <form action={adjustAction}>
+                    <input type="hidden" name="id" value={h.id} />
+                    <input type="hidden" name="accountId" value={h.accountId} />
+                    <input
+                      type="hidden"
+                      name="toBalance"
+                      value={h.statementBalance}
+                    />
+                    <input type="hidden" name="date" value={h.date} />
+                    <button type="submit" className="underline text-xs">
+                      Ajustar
+                    </button>
+                  </form>
+                  <form action={ignoreAction}>
                     <input type="hidden" name="id" value={h.id} />
                     <button
                       type="submit"
-                      className="underline opacity-60 text-xs"
+                      className="underline opacity-50 text-xs"
                     >
-                      Aceptar
+                      Ignorar
                     </button>
                   </form>
                 </span>

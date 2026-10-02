@@ -355,7 +355,8 @@ export type MovementKind =
   | "transferencia"
   | "pago"
   | "cambio"
-  | "apertura";
+  | "apertura"
+  | "ajuste";
 
 export type RecentTransaction = {
   id: string;
@@ -417,6 +418,9 @@ export async function recentTransactions(
         when exists (select 1 from legs l
                       where l.id = r.id and l.account_name like 'Equity:FX%')
           then 'cambio'
+        when exists (select 1 from legs l
+                      where l.id = r.id and l.account_name like 'Equity:Ajustes%')
+          then 'ajuste'
         when exists (select 1 from legs l
                       where l.id = r.id and l.account_type = 'income')
           then 'ingreso'

@@ -38,6 +38,7 @@ import {
   unassignedPool,
 } from "./queries";
 import {
+  adjustAccountBalance,
   missingEntries,
   reconcilableAccounts,
   recordReconciliation,
@@ -232,6 +233,54 @@ async function main() {
     // convertir, que es exactamente la diferencia de cambio que queda en las
     // cuentas de FX.
     check("convert() reconstruye los ARS", await convert(db, usd, rate), "1999999.875");
+  }
+
+  /* ------------------------------------------- ajustar un saldo --- */
+  // La conciliación detecta la diferencia; sin esto no hay nada que hacer con
+  // ella. Hace falta para lo que no se arregla cargando un movimiento: los
+  // CEDEARs valen lo que vale el mercado y el fondo cobra comisión.
+  console.log("\n### Ajustar un saldo");
+  {
+    const before = await balance("Cocos Capital — CEDEARs");
+    check("CEDEARs antes", before, "2151.68");
+
+    const rec = await recordReconciliation(db, {
+      userId: user.id,
+      date: DATE,
+      balances: [
+        {
+          accountId: acct("Cocos Capital — CEDEARs"),
+          statementBalance: "2184.67",
+        },
+      ],
+    });
+    check("la diferencia es la revalorización", rec[0].difference, "32.99");
+
+    const res = await adjustAccountBalance(db, {
+      userId: user.id,
+      accountId: acct("Cocos Capital — CEDEARs"),
+      toBalance: "2184.67",
+      date: DATE,
+    });
+    if (res) created.push(res.transactionId);
+    check("el ajuste mueve justo la diferencia", res!.delta, "32.99");
+    check("CEDEARs queda en el saldo real", await balance("Cocos Capital — CEDEARs"), "2184.67");
+    // La contrapartida va a equity y NO a una cuenta de gasto o ingreso: una
+    // diferencia sin explicar no tiene que ensuciar los promedios del planner.
+    check("la contrapartida queda en Ajustes", await balance("Equity:Ajustes:USD"), "-32.99");
+    check("no cuenta como gasto", await expenseOf(res!.transactionId), "0");
+
+    // Ajustar al saldo que ya tiene no hace nada.
+    const again = await adjustAccountBalance(db, {
+      userId: user.id,
+      accountId: acct("Cocos Capital — CEDEARs"),
+      toBalance: "2184.67",
+      date: DATE,
+    });
+    check("ajustar a lo mismo no crea asiento", again === null ? "1" : "0", "1");
+
+    await db.execute(dsql`delete from reconciliations`);
+    void rec;
   }
 
   /* --------------------------------------- borrar un movimiento --- */
@@ -914,6 +963,7 @@ async function main() {
   check("Tarjeta ARS restaurada", await balance("Tarjeta de crédito BBVA — ARS"), "-200000");
   check("Tarjeta USD intacta", await balance("Tarjeta de crédito BBVA — USD"), "-220.82");
   check("Equity:FX:ARS restaurado", await balance("Equity:FX:ARS"), "0");
+  check("Equity:Ajustes:USD restaurado", await balance("Equity:Ajustes:USD"), "0");
   check(
     "sobre Suscripciones restaurado (USD)",
     await envelopeBalance("Suscripciones", "USD"),

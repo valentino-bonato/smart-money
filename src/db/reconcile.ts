@@ -13,7 +13,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import type { db as Database } from "./index";
-import { toMinor } from "./ledger";
+import { createTransaction, fromMinor, toMinor } from "./ledger";
 import * as schema from "./schema";
 
 type Currency = (typeof schema.currency.enumValues)[number];
@@ -224,6 +224,7 @@ export async function reconciliationHistory(
     id: string;
     date: string;
     account: string;
+    accountId: string;
     currency: Currency;
     statementBalance: string;
     computedBalance: string;
@@ -231,7 +232,7 @@ export async function reconciliationHistory(
     resolved: boolean;
   }>(sql`
     select r.id as id, r.date::text as date, a.name as account,
-           a.currency as currency,
+           a.id as "accountId", a.currency as currency,
            r.statement_balance::text as "statementBalance",
            r.computed_balance::text  as "computedBalance",
            r.difference::text        as difference,
@@ -246,6 +247,7 @@ export async function reconciliationHistory(
     id: string;
     date: string;
     account: string;
+    accountId: string;
     currency: Currency;
     statementBalance: string;
     computedBalance: string;
@@ -263,4 +265,87 @@ export async function resolveReconciliation(
     .update(schema.reconciliations)
     .set({ resolvedAt: sql`now()` })
     .where(and(eq(schema.reconciliations.id, opts.id)));
+}
+
+/**
+ * Deja la cuenta en el saldo que dice el homebanking, con un asiento de ajuste.
+ *
+ * Hace falta porque hay diferencias que no se arreglan cargando un movimiento:
+ * los CEDEARs valen lo que vale el mercado, el fondo cobra comisión, y el saldo
+ * de apertura pudo haber entrado mal. Sin esto la conciliación detecta la
+ * diferencia y después no hay nada que hacer con ella.
+ *
+ * La contrapartida va a `Equity:Ajustes:<moneda>` — equity y no ingreso o
+ * gasto a propósito: una diferencia que no se sabe de qué es no tiene que
+ * ensuciar los promedios por categoría, que son input del planner. Todos los
+ * ajustes quedan juntos en una cuenta, así que se pueden auditar de un vistazo.
+ */
+export async function adjustAccountBalance(
+  db: Executor,
+  opts: {
+    userId: string;
+    accountId: string;
+    /** El saldo que tiene que quedar. */
+    toBalance: string;
+    date: string;
+    note?: string | null;
+    /** La conciliación que se da por resuelta con este ajuste. */
+    reconciliationId?: string | null;
+  },
+): Promise<{ transactionId: string; delta: string } | null> {
+  const [account] = await db
+    .select()
+    .from(schema.accounts)
+    .where(
+      and(
+        eq(schema.accounts.id, opts.accountId),
+        eq(schema.accounts.userId, opts.userId),
+      ),
+    );
+  if (!account) throw new Error("Cuenta inexistente");
+
+  const [row] = (await db.execute<{ balance: string }>(sql`
+    select coalesce(sum(amount), 0)::text as balance
+    from entries where account_id = ${opts.accountId}
+  `)) as unknown as { balance: string }[];
+
+  const delta = toMinor(opts.toBalance) - toMinor(row.balance);
+  if (delta === 0n) return null;
+
+  const [adjust] = await db
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(
+      and(
+        eq(schema.accounts.userId, opts.userId),
+        eq(schema.accounts.name, `Equity:Ajustes:${account.currency}`),
+      ),
+    );
+  if (!adjust) {
+    throw new Error(
+      `Falta la cuenta Equity:Ajustes:${account.currency}. Correr el seed.`,
+    );
+  }
+
+  const amount = fromMinor(delta);
+  const { id } = await createTransaction(db, {
+    userId: opts.userId,
+    date: opts.date,
+    description:
+      opts.note ?? `Ajuste de conciliación · ${account.name}`,
+    entries: [
+      { accountId: opts.accountId, amount, currency: account.currency },
+      {
+        accountId: adjust.id,
+        amount: fromMinor(-delta),
+        currency: account.currency,
+      },
+    ],
+  });
+
+  if (opts.reconciliationId) {
+    await resolveReconciliation(db, { id: opts.reconciliationId });
+  }
+
+  return { transactionId: id, delta: amount };
 }

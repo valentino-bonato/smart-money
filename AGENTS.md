@@ -220,6 +220,19 @@ lo que la app **ya sabe** que tiene que pasar y todavía no vio:
 - gastos fijos del mes sin cargo generado (vía `transactions.recurring_expense_id`);
 - cobros esperados cuya `expected_date` ya pasó.
 
+Una diferencia se cierra de dos maneras, y la pantalla ofrece las dos:
+
+- **Ajustar** (`adjustAccountBalance`) deja la cuenta en el saldo del
+  homebanking con un asiento contra `Equity:Ajustes:<moneda>`. Es para lo que
+  NO se arregla cargando un movimiento: la revalorización de los CEDEARs, una
+  comisión del fondo, un saldo de apertura que entró mal.
+- **Ignorar** solo la saca de la lista, sin tocar saldos. Es para cuando ya se
+  sabe qué falta y se va a cargar.
+
+La contrapartida del ajuste va a **equity** y no a una cuenta de ingreso o
+gasto, a propósito: una diferencia que no se sabe de qué es no tiene que
+ensuciar los promedios por categoría, que son input del planner.
+
 `difference = statement − computed`. Positiva = el banco tiene más, así que
 falta cargar un ingreso o hay un gasto cargado que no existió. La resta se hace
 en la base con `numeric`. Las cuentas que se dejan en blanco **no** se

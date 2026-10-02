@@ -104,7 +104,9 @@ Están preparados en el modelo y no construidos:
 - **Multiusuario** con auth real y RLS. `user_id` está en todas las tablas raíz
   desde el día 1, así que no requiere migración de datos — solo reemplazar el
   cuerpo de `getCurrentUser()`.
-- **Revaluación** de la cartera a valor de mercado. Hoy el saldo es valor
+- **Revaluación automática** de la cartera a valor de mercado. Ajustar a mano
+  desde la conciliación ya funciona y deja el rastro en `Equity:Ajustes`; lo
+  que falta es que salga sola de un precio, sin tener que mirar Cocos. Hoy el saldo es valor
   libro: no se mueve ni con el dólar ni con el S&P. **Ya hay una brecha real
   medida**: al 2-oct Cocos valuaba los CEDEARs en US$ 2.183,56 y la app dice
   US$ 2.151,68 — 31,88 dólares de diferencia, que es apreciación de mercado más

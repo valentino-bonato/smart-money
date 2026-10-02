@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { db } from "@/db";
 import {
+  adjustAccountBalance,
   recordReconciliation,
   resolveReconciliation,
   type ReconciliationResult,
@@ -75,11 +76,38 @@ export async function reconcileAction(
   }
 }
 
-/** Marca una diferencia como aceptada, sin cargar nada más. */
-export async function resolveAction(form: FormData): Promise<void> {
+/**
+ * Da la diferencia por conocida y la saca de la lista, SIN tocar los saldos.
+ * Es para cuando ya se sabe qué fue y se va a cargar el movimiento que falta.
+ */
+export async function ignoreAction(form: FormData): Promise<void> {
   await getCurrentUser();
   const id = String(form.get("id") ?? "");
   if (!id) return;
   await resolveReconciliation(db, { id });
+  refresh();
+}
+
+/**
+ * Deja la cuenta en el saldo del homebanking, con un asiento de ajuste contra
+ * `Equity:Ajustes`. Es lo que hace falta cuando la diferencia no se arregla
+ * cargando un movimiento: revalorización de los CEDEARs, una comisión del
+ * fondo, un saldo de apertura que entró mal.
+ */
+export async function adjustAction(form: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  const id = String(form.get("id") ?? "");
+  const accountId = String(form.get("accountId") ?? "");
+  const toBalance = String(form.get("toBalance") ?? "");
+  const date = String(form.get("date") ?? "");
+  if (!id || !accountId || !toBalance) return;
+
+  await adjustAccountBalance(db, {
+    userId: user.id,
+    accountId,
+    toBalance,
+    date,
+    reconciliationId: id,
+  });
   refresh();
 }

@@ -222,6 +222,12 @@ async function main() {
         ["Equity:Opening:USD", "USD"],
         ["Equity:FX:ARS", "ARS"],
         ["Equity:FX:USD", "USD"],
+        // Donde va lo que la conciliación no puede explicar. En equity y no en
+        // ingreso o gasto a propósito: una diferencia que no se sabe de qué es
+        // no tiene que ensuciar los promedios por categoría, que son input del
+        // planner.
+        ["Equity:Ajustes:ARS", "ARS"],
+        ["Equity:Ajustes:USD", "USD"],
       ] as const
     ).map(([name, currency]) => ({
       name,
