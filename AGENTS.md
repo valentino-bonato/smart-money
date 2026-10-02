@@ -104,8 +104,11 @@ Dos consecuencias que no hay que olvidar:
 - **Transferir pesos ahí lo rechaza el trigger.** Mandar plata a CEDEARs es
   comprar dólares: va por `/mover` con las dos monedas. El plan lo marca con
   `needsExchange`.
-- **Conciliar contra Cocos pide convertir.** Cocos muestra pesos; la app, dólares.
-- Sigue siendo **valor libro**: no se revalúa ni por el dólar ni por el S&P. La
+- **Conciliar contra Cocos sale directo**: Cocos tiene su propio toggle
+  ARS/US$ y muestra la cartera en dólares. (Esto corrige una suposición previa
+  de que mostraba solo pesos.)
+- Sigue siendo **valor libro**: no se revalúa ni por el dólar ni por el S&P. Al
+  2-oct la brecha real era de 31,88 USD contra lo que valuaba Cocos. La
   revaluación está fuera del v1 (`BACKLOG.md`).
 
 ## Sobres

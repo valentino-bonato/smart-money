@@ -42,6 +42,29 @@ todo lo demás:
 
 Lo que ya existe: deshacer la aprobación de un plan, desde `/plan`.
 
+## Ver la cartera en pesos o en dólares
+
+**Pedido el 2-oct-2026**, con la pantalla de Cocos al lado: un toggle
+"expresado en ARS / US$" sobre el patrimonio, al **dólar MEP** — no al oficial,
+que es el que usa el planner para las reglas.
+
+Lo que hace falta:
+
+- Una segunda fuente de precio. `prices` ya tiene la columna `source` y
+  `rateAt()` ya acepta `source` + `fallbackSource`, así que el modelo aguanta
+  sin tocar nada: es cargar filas con `source = 'mep'`. Lo que falta decidir es
+  de dónde sale ese número — a mano, o de alguna API.
+- Mantener separados los dos usos del precio. El oficial decide **cuánta plata
+  asigna el planner**; el MEP sería solo para **mirar**. Mezclarlos movería los
+  aportes de las metas sin que nadie lo haya pedido.
+- Dónde vive el toggle. `netWorth()` en `queries.ts` ya recibe el precio por
+  parámetro, así que la cuenta está hecha; falta la pantalla.
+
+**Tensión con §1**, que dice "sin KPIs ni dashboards en el v1". Un toggle de
+moneda sobre un número que ya se muestra es una opción de vista, no un tablero.
+Pero "patrimonio total" sí es un KPI, y hoy no aparece en ninguna pantalla —
+solo en la salida del seed. Decidir si entra es parte del ítem.
+
 ## Del v1, sin construir
 
 - **Paso 7 · chat sobre el plan.** La capa conversacional con la Claude API,
@@ -81,10 +104,11 @@ Están preparados en el modelo y no construidos:
 - **Multiusuario** con auth real y RLS. `user_id` está en todas las tablas raíz
   desde el día 1, así que no requiere migración de datos — solo reemplazar el
   cuerpo de `getCurrentUser()`.
-- **Revaluación de la diferencia de cambio** como resultado separado. Las
-  cuentas `Equity:FX:*` ya la acumulan. Se vuelve más visible desde que los
-  CEDEARs están en dólares: el saldo es valor libro y no se mueve ni con el
-  dólar ni con el S&P, así que hay que ajustarlo a mano cuando importe.
+- **Revaluación** de la cartera a valor de mercado. Hoy el saldo es valor
+  libro: no se mueve ni con el dólar ni con el S&P. **Ya hay una brecha real
+  medida**: al 2-oct Cocos valuaba los CEDEARs en US$ 2.183,56 y la app dice
+  US$ 2.151,68 — 31,88 dólares de diferencia, que es apreciación de mercado más
+  MEP contra oficial. Las cuentas `Equity:FX:*` ya acumulan la parte cambiaria.
 
 ## Plan B declarado en §8
 
