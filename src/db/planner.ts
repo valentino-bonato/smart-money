@@ -175,6 +175,15 @@ export async function computePlan(
     );
   const excludePlanId = existing?.id ?? null;
 
+  // Lo que de verdad cuestan los gastos fijos de cada sobre, sumado desde
+  // `recurring_expenses` y convertido a pesos. Es la fuente de verdad: el
+  // `contribution_amount` del sobre es un número escrito a mano que se
+  // desincroniza en cuanto cambia un precio o aparece una suscripción nueva.
+  const recurring = await recurringByEnvelope(db, {
+    userId: opts.userId,
+    rate: opts.rate,
+  });
+
   const goals = await goalProgress(db, {
     rate: opts.rate,
     period: opts.period,
@@ -258,11 +267,26 @@ export async function computePlan(
 
   // 2. Las obligaciones fijas, en el orden del sobre.
   for (const e of applied.base ? [] : envelopes) {
-    if (e.contributionRule !== "fixed" || !e.contributionAmount) continue;
+    if (e.contributionRule !== "fixed") continue;
+
+    // Primero lo que cuestan los gastos fijos reales; si el sobre no tiene
+    // ninguno cargado, el monto escrito a mano.
+    const fromRecurring = recurring.get(e.id);
     const amount =
-      e.contributionCurrency === "USD"
-        ? usdToArs(e.contributionAmount, opts.rate)
-        : e.contributionAmount;
+      fromRecurring?.amountArs ??
+      (e.contributionAmount
+        ? e.contributionCurrency === "USD"
+          ? usdToArs(e.contributionAmount, opts.rate)
+          : e.contributionAmount
+        : null);
+    if (!amount) continue;
+
+    const ruleApplied = fromRecurring
+      ? `fixed · ${fromRecurring.detail}`
+      : e.contributionCurrency === "USD"
+        ? `fixed · ${tidy(e.contributionAmount!)} USD @ ${tidy(opts.rate)}`
+        : `fixed · ${tidy(e.contributionAmount!)}/mes`;
+
     push({
       envelopeId: e.id,
       envelopeName: e.name,
@@ -271,10 +295,7 @@ export async function computePlan(
       amount,
       currency: "ARS",
       tier: "base",
-      ruleApplied:
-        e.contributionCurrency === "USD"
-          ? `fixed · ${tidy(e.contributionAmount)} USD @ ${tidy(opts.rate)}`
-          : `fixed · ${tidy(e.contributionAmount)}/mes`,
+      ruleApplied,
     });
     floor -= toMinor(amount);
   }
@@ -559,6 +580,47 @@ async function storedLines(
       })),
     applied,
   };
+}
+
+/**
+ * Lo que cuestan por mes los gastos fijos de cada sobre, en pesos.
+ *
+ * Existe para que el aporte del sobre no sea un número copiado a mano. Con el
+ * número escrito aparte, agregar una suscripción no cambia nada y el sobre
+ * queda corto sin que nadie se entere — que es exactamente lo que pasó cuando
+ * aparecieron Claro y La Nación.
+ */
+async function recurringByEnvelope(
+  db: Executor,
+  opts: { userId: string; rate: string },
+): Promise<Map<string, { amountArs: string; detail: string }>> {
+  type Row = {
+    envelopeId: string;
+    name: string;
+    amount: string;
+    currency: Currency;
+  };
+  const rows = (await db.execute<Row>(sql`
+    select r.envelope_id as "envelopeId", r.name as name,
+           r.amount::text as amount, r.currency as currency
+    from recurring_expenses r
+    where r.user_id = ${opts.userId} and r.active = true
+    order by r.amount desc
+  `)) as unknown as Row[];
+
+  const out = new Map<string, { amountArs: string; detail: string }>();
+  for (const r of rows) {
+    const inArs =
+      r.currency === "USD" ? usdToArs(r.amount, opts.rate) : r.amount;
+    const prev = out.get(r.envelopeId);
+    const total = fromMinor(toMinor(prev?.amountArs ?? "0") + toMinor(inArs));
+    const piece = `${r.name} ${tidy(r.amount)}${r.currency === "USD" ? " USD" : ""}`;
+    out.set(r.envelopeId, {
+      amountArs: total,
+      detail: prev ? `${prev.detail} + ${piece}` : piece,
+    });
+  }
+  return out;
 }
 
 /** Lo efectivamente cobrado en el período desde las fuentes de un nivel. */
