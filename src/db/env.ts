@@ -41,7 +41,13 @@ export function loadEnv(opts: { scratch?: boolean } = {}) {
 export function loadMigrationEnv() {
   config({ path: ".env.local", quiet: true });
   config({ path: ".env", quiet: true });
-  const url = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
+  // `DATABASE_URL_UNPOOLED` es el nombre que usa Neon y que la integración de
+  // Vercel inyecta sola, así que va primero: con eso no hay que configurar
+  // nada a mano en producción.
+  const url =
+    process.env.DATABASE_URL_UNPOOLED ??
+    process.env.DIRECT_DATABASE_URL ??
+    process.env.DATABASE_URL;
   if (!url) throw new Error("Falta DATABASE_URL (ver .env.example)");
   return url;
 }

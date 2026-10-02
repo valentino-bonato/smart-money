@@ -42,3 +42,7 @@ next-env.d.ts
 
 # ejemplo de env sí se commitea
 !.env.example
+.neon
+
+# skills de agentes instaladas por `neon skills`
+.claude/skills/

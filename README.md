@@ -46,7 +46,11 @@ son intercambiables.**
 | variable | cuál | para qué |
 | --- | --- | --- |
 | `DATABASE_URL` | la que tiene `-pooler` en el host | la app |
-| `DIRECT_DATABASE_URL` | la que **no** lo tiene | las migraciones |
+| `DATABASE_URL_UNPOOLED` | la que **no** lo tiene | las migraciones |
+
+Las dos las escribe `neon link` en `.env.local`, y la integración de Vercel con
+Neon inyecta esos mismos nombres sola. Por eso el código usa el nombre de Neon
+y no uno propio: así no hay nada que configurar a mano en producción.
 
 El pooler de Neon es PgBouncer en *transaction mode*. Para la app está perfecto:
 mantiene la misma conexión durante toda la transacción, que es lo que el
@@ -70,10 +74,10 @@ Va por la conexión **directa**, no por el pooler. Lleva también el esquema
 `drizzle` con las migraciones aplicadas, así que `db:migrate` después no
 reintenta nada.
 
-Ensayado contra una base limpia el 2-oct-2026: los 22 asientos, las 52
-partidas, los 8 saldos y los dos triggers llegaron idénticos — incluidos los
-flags `DEFERRABLE INITIALLY DEFERRED`, verificados en `pg_trigger` y probados
-rechazando un asiento desbalanceado del otro lado.
+Hecho contra Neon el 2-oct-2026: los 22 asientos, las 52 partidas, los 8 saldos
+y los dos triggers llegaron idénticos. Los flags `DEFERRABLE INITIALLY DEFERRED`
+se verificaron en `pg_trigger`, y el invariante se probó **a través del pooler**
+—que es como lo usa la app— rechazando un asiento desbalanceado.
 
 El dump tiene montos reales: sueldo, saldos, metas. No va al repo.
 

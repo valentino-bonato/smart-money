@@ -18,6 +18,8 @@
     "db:migrate:test": "DATABASE_URL=$TEST_DATABASE_URL drizzle-kit migrate"
   },
   "dependencies": {
+    "@neon/config": "^1.8.3",
+    "@neon/env": "^1.4.8",
     "drizzle-orm": "^0.45.3",
     "next": "16.3.8",
     "postgres": "^3.4.9",
