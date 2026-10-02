@@ -5,7 +5,13 @@ import { usePathname } from "next/navigation";
 
 /**
  * Navegación compartida. Antes cada pantalla repetía sus propios links, así que
- * agregar una obligaba a tocar las cinco y era fácil olvidarse de alguna.
+ * agregar una obligaba a tocar las cinco.
+ *
+ * Nada de alto fijo ni de bordes que se salgan de la caja: la primera versión
+ * usaba `h-14` con `overflow-x-auto` y un `border-b` con margen negativo, y en
+ * macOS la barra de scroll se comía los links y les cortaba el borde. Ahora la
+ * barra crece con su contenido, los links envuelven si no entran, y el activo
+ * se marca con un fondo en vez de un borde que sobresale.
  */
 const LINKS = [
   { href: "/", label: "Cargar" },
@@ -19,11 +25,10 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-10 border-b border-black/10 dark:border-white/10 bg-background/85 backdrop-blur">
-      <div className="mx-auto w-full max-w-6xl px-5 h-14 flex items-center gap-5">
-        <span className="text-sm font-semibold shrink-0">smart money</span>
-        {/* En el teléfono la barra se desplaza sola si no entran los cinco. */}
-        <nav className="flex gap-4 overflow-x-auto text-sm">
+    <header className="sticky top-0 z-10 border-b border-black/10 dark:border-white/10 bg-background/90 backdrop-blur">
+      <div className="mx-auto w-full max-w-6xl px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="text-sm font-semibold shrink-0 mr-1">smart money</span>
+        <nav className="flex flex-wrap items-center gap-1 text-sm">
           {LINKS.map((l) => {
             const active =
               l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
@@ -32,10 +37,10 @@ export function Nav() {
                 key={l.href}
                 href={l.href}
                 aria-current={active ? "page" : undefined}
-                className={`whitespace-nowrap py-1 border-b-2 -mb-[1px] ${
+                className={`rounded-md px-2 py-1 whitespace-nowrap transition-opacity ${
                   active
-                    ? "border-foreground opacity-100"
-                    : "border-transparent opacity-55 hover:opacity-90"
+                    ? "bg-black/[0.07] dark:bg-white/[0.12] font-medium"
+                    : "opacity-60 hover:opacity-100"
                 }`}
               >
                 {l.label}
