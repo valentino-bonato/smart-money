@@ -122,10 +122,15 @@ async function main() {
         currency: "ARS" as const,
         institution: "Mercado Pago",
       },
+      // En USD aunque los CEDEARs se compren y se coticen en pesos. §8 lo
+      // deja como decisión explícita del usuario: "sigue al dólar, pero es
+      // renta variable". Valuarlo en pesos haría que una suba del dólar
+      // mostrara la meta del auto yendo para atrás, cuando en realidad los
+      // CEDEARs subieron en pesos junto con él.
       {
         name: "Cocos Capital — CEDEARs",
         type: "asset" as const,
-        currency: "ARS" as const,
+        currency: "USD" as const,
         institution: "Cocos Capital",
       },
       {
@@ -526,7 +531,8 @@ async function main() {
     const openingBalances = [
       { account: "BBVA caja de ahorro", amount: "2691000", currency: "ARS" },
       { account: "Mercado Pago", amount: "15000", currency: "ARS" },
-      { account: "Cocos Capital — CEDEARs", amount: "3335100", currency: "ARS" },
+      // 3.335.100 ARS al oficial de 1.550 del 1-oct.
+    { account: "Cocos Capital — CEDEARs", amount: "2151.68", currency: "USD" },
       { account: "Cocos Capital — fondo USD", amount: "1495", currency: "USD" },
       // La tabla de saldos de apertura de §5 no lista la tarjeta, pero §5 dice
       // que el resumen real es 200.000 y el plan reserva eso para pagarlo. Sin
@@ -552,13 +558,13 @@ async function main() {
       {
         transactionId: openingTx.id,
         accountId: acct("Equity:Opening:ARS").id,
-        amount: "-5841100", // 2691000 + 15000 + 3335100 - 200000
+        amount: "-2506000", // 2691000 + 15000 - 200000
         currency: "ARS" as const,
       },
       {
         transactionId: openingTx.id,
         accountId: acct("Equity:Opening:USD").id,
-        amount: "-1495",
+        amount: "-3646.68", // 1495 del fondo + 2151,68 de CEDEARs
         currency: "USD" as const,
       },
     ]);
@@ -585,8 +591,8 @@ async function main() {
       {
         envelopeId: env("Auto — ahorro").id,
         date: CARRY_IN,
-        amount: "790000",
-        currency: "ARS",
+        amount: "509.68", // 790.000 ARS al oficial de 1.550
+        currency: "USD",
         // §8: plata de una meta a ~11 meses en renta variable. Decisión
         // explícita del usuario, no un default.
         note: "Saldo de apertura — en CEDEARs del S&P500",
@@ -594,8 +600,8 @@ async function main() {
       {
         envelopeId: env("CEDEARs").id,
         date: CARRY_IN,
-        amount: "2545100",
-        currency: "ARS",
+        amount: "1642", // 2.545.100 ARS a 1.550, exacto
+        currency: "USD",
         note: "Saldo de apertura",
       },
     ]);
@@ -951,9 +957,13 @@ async function main() {
   // Antes del plan: cuánta plata de la apertura no tenía propósito.
   const openingPool = await db.execute(dsql`
     select (
-      (select sum(e.amount) from entries e join accounts a on a.id = e.account_id
-       where a.type = 'asset' and a.currency = 'ARS')
-      - (select sum(amount) from allocations where currency = 'ARS' and plan_id is null)
+      coalesce((select sum(e.amount) from entries e
+                 join accounts a on a.id = e.account_id
+                where a.type = 'asset' and a.currency = 'ARS'), 0)
+      -- coalesce: desde que los CEDEARs son dólares puede no haber NINGUNA
+      -- asignación en pesos al arranque, y sum() de cero filas da null.
+      - coalesce((select sum(amount) from allocations
+                   where currency = 'ARS' and plan_id is null), 0)
     )::text as pool
   `);
 
@@ -977,6 +987,8 @@ async function main() {
 
   console.log("\n=== Contra la spec ===");
   // §5: "2.706.000 ARS estaban sin propósito asignado"
+  // Ahora los CEDEARs son dólares, así que a la apertura NINGÚN peso tenía
+  // propósito: los 2.706.000 son todo el pool en pesos.
   expect("pool sin asignar a la apertura (ARS)", row(openingPool)[0].pool, "2706000");
   // §5: piso = 2.691.000 (= saldo de apertura de BBVA), variable = 5.980.000
   const totals = Object.fromEntries(row(planTotals).map((r) => [r.tier, r.total]));
@@ -1075,7 +1087,7 @@ async function main() {
   // §5 da 8.358.100 porque no resta ninguna deuda de tarjeta y redondea el
   // tramo USD. Restando los dos resúmenes a pagar — 200.000 ARS y 220,82 USD —
   // y con el dólar exacto a 1.550: 7.816.079.
-  expect("patrimonio total (ARS)", worth, "7816079");
+  expect("patrimonio total (ARS)", worth, "7816083");
 
   const invariant = await db.execute(dsql`
     select count(*)::int as unbalanced from (

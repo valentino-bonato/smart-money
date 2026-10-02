@@ -89,6 +89,25 @@ incurre en dólares. El sobre, en cambio, recibe pesos del piso y se convierte
 al comprar los dólares — igual que el Viaje, que tiene 703 USD y 1.277.000 ARS
 al mismo tiempo.
 
+## Los CEDEARs están en USD
+
+`Cocos Capital — CEDEARs` es una cuenta en **dólares**, aunque los CEDEARs se
+compren y se coticen en pesos. §8 lo deja como decisión explícita del usuario
+("sigue al dólar, pero es renta variable"), y la tomó así.
+
+El motivo es el catch-up del auto: valuados en pesos a valor libro, una suba del
+dólar mostraría la meta **yendo para atrás**, cuando en realidad los CEDEARs
+subieron en pesos junto con él. En dólares el progreso queda estable.
+
+Dos consecuencias que no hay que olvidar:
+
+- **Transferir pesos ahí lo rechaza el trigger.** Mandar plata a CEDEARs es
+  comprar dólares: va por `/mover` con las dos monedas. El plan lo marca con
+  `needsExchange`.
+- **Conciliar contra Cocos pide convertir.** Cocos muestra pesos; la app, dólares.
+- Sigue siendo **valor libro**: no se revalúa ni por el dólar ni por el S&P. La
+  revaluación está fuera del v1 (`BACKLOG.md`).
+
 ## Sobres
 
 Son 11, no los 9 de la spec. Se agregaron dos gastos fijos que §4 no tiene:
@@ -317,7 +336,7 @@ el signo de nada.
   consultoría, la meta con fecha dura queda corta.
 - `pool_sin_asignar` = 215.000 ARS y 220,82 USD. Los dos son resúmenes a pagar que
   ningún sobre reclama: la fórmula de §6 no mira los pasivos.
-- Patrimonio: 7.816.079 ARS.
+- Patrimonio: 7.816.083 ARS.
 
 ## Escribir en el libro contable
 

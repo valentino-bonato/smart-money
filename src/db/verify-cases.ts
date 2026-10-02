@@ -249,7 +249,9 @@ async function main() {
       amount: "80000",
       currency: "ARS",
       fromAccountId: acct("BBVA caja de ahorro"),
-      toAccountId: acct("Cocos Capital — CEDEARs"),
+      // A la corriente y no a CEDEARs: desde que CEDEARs es en dólares, una
+      // transferencia en pesos ahí la rechaza el trigger, y con razón.
+      toAccountId: acct("BBVA cuenta corriente"),
       description: "Transferencia equivocada",
     });
     check(
@@ -395,15 +397,18 @@ async function main() {
       check("apertura · clasificada", opening.kind === "apertura" ? "1" : "0", "1");
       // Siete partidas, dos monedas: tiene que mostrar las dos y no una sola.
       check("apertura · monedas mostradas", String(opening.inflows.length), "2");
+      // 2.706.000 en pesos (caja de ahorro + Mercado Pago) y 3.646,68 en
+      // dólares (el fondo de Cocos + los CEDEARs, que desde que son en USD ya
+      // no suman del lado de los pesos).
       check(
         "apertura · total en ARS",
         opening.inflows.find((i) => i.currency === "ARS")!.amount,
-        "6041100",
+        "2706000",
       );
       check(
         "apertura · total en USD",
         opening.inflows.find((i) => i.currency === "USD")!.amount,
-        "1495",
+        "3646.68",
       );
     }
 
@@ -612,17 +617,17 @@ async function main() {
     allocs.push(
       ...(await returnToPool(db, {
         envelopeId: env("CEDEARs"),
-        amount: "500000",
-        currency: "ARS",
+        amount: "500",
+        currency: "USD",
         date: DATE,
         note: "Vuelve al pool",
       })),
     );
     const poolAfter = await unassignedPool(db);
     check(
-      "el pool en ARS sube 500.000",
-      poolAfter[0].pool,
-      sumAmounts([poolBeforeReturn[0].pool, "500000"]),
+      "el pool en USD sube 500",
+      poolAfter[1].pool,
+      sumAmounts([poolBeforeReturn[1].pool, "500"]),
     );
 
     // Y lo que no se permite.
@@ -914,12 +919,12 @@ async function main() {
     await envelopeBalance("Suscripciones", "USD"),
     "-143.82",
   );
-  // 2.545.100 y no 5.499.100: la línea de CEDEARs del plan es del nivel
-  // variable, así que todavía no generó allocation. Solo está la apertura.
+  // 1.642 USD y no más: la línea de CEDEARs del plan es del nivel variable,
+  // así que todavía no generó allocation. Solo está el arrastre.
   check(
-    "sobre CEDEARs restaurado (ARS)",
-    await envelopeBalance("CEDEARs", "ARS"),
-    "2545100",
+    "sobre CEDEARs restaurado (USD)",
+    await envelopeBalance("CEDEARs", "USD"),
+    "1642",
   );
 
   console.log(failures === 0 ? "\nTodos los casos OK.\n" : `\n${failures} fallas.\n`);

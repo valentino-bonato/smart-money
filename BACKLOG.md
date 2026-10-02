@@ -82,7 +82,9 @@ Están preparados en el modelo y no construidos:
   desde el día 1, así que no requiere migración de datos — solo reemplazar el
   cuerpo de `getCurrentUser()`.
 - **Revaluación de la diferencia de cambio** como resultado separado. Las
-  cuentas `Equity:FX:*` ya la acumulan.
+  cuentas `Equity:FX:*` ya la acumulan. Se vuelve más visible desde que los
+  CEDEARs están en dólares: el saldo es valor libro y no se mueve ni con el
+  dólar ni con el S&P, así que hay que ajustarlo a mano cuando importe.
 
 ## Plan B declarado en §8
 
