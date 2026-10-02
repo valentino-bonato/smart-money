@@ -16,7 +16,7 @@ npm install
 createdb smart_money
 cp .env.example .env.local   # ajustar DATABASE_URL
 npm run db:migrate           # esquema + triggers del invariante
-npm run db:seed              # datos reales al 1-oct-2026
+npm run db:seed              # datos reales al 1-oct-2026 (no pisa datos cargados)
 npm run dev
 ```
 
@@ -24,7 +24,7 @@ npm run dev
 | --- | --- |
 | `npm run db:generate` | genera una migración desde `src/db/schema.ts` |
 | `npm run db:migrate` | aplica las migraciones pendientes |
-| `npm run db:seed` | borra y recarga los datos reales al 1-oct-2026, y verifica los números contra la spec |
+| `npm run db:seed` | carga los datos reales al 1-oct-2026 y verifica los números contra la spec. **Se niega a correr si hay movimientos cargados**: usá `npm run db:seed -- --force` para borrarlos y empezar de cero |
 | `npm run db:verify` | prueba los 3 casos raros de §8 contra el invariante real |
 | `npm run db:plan` | corre el motor del planner y lo compara con el plan de §5 |
 | `npm run db:reset` | borra el esquema completo (destructivo, solo local) |

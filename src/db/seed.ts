@@ -49,6 +49,25 @@ async function main() {
   /** Dólar oficial usado en todo el plan de octubre (§5). */
   const USD_ARS = "1550";
 
+  // ------------------------------------------------------------------ guarda
+  // El seed TRUNCA todo. Mientras eran solo los datos de la spec eso no
+  // importaba, pero en cuanto hay un gasto cargado a mano, correrlo lo borra
+  // sin avisar. Así que si hay movimientos, no corre salvo que se lo pidan.
+  const [{ count }] = (await db.execute<{ count: string }>(
+    dsql`select count(*)::text as count from transactions`,
+  )) as unknown as { count: string }[];
+  const force =
+    process.argv.includes("--force") || process.env.SEED_FORCE === "1";
+  if (Number(count) > 0 && !force) {
+    console.error(
+      `\nLa base tiene ${count} movimientos y el seed los borra TODOS.\n` +
+        `Si de verdad querés volver a los datos de la spec:\n` +
+        `  npm run db:seed -- --force\n`,
+    );
+    await client.end();
+    process.exit(1);
+  }
+
   const { planId, userId } = await db.transaction(async (tx) => {
     // ---------------------------------------------------------------- limpieza
     await tx.execute(dsql`

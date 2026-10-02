@@ -33,7 +33,10 @@ Spec de diseño (fuente de verdad): https://app.notion.com/p/3ec6a57ed8b281a1bc5
 - `drizzle/0000_*.sql` — tablas, enums, índices, checks
 - `drizzle/0001_invariant_triggers.sql` — `assert_balanced` (deferido) y
   `entries_validate_account` (moneda + sobre según tipo de cuenta)
-- `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec
+- `src/db/seed.ts` — datos reales al 1-oct-2026, con asserts contra la spec.
+  **TRUNCA todo**, así que se niega a correr si hay movimientos cargados; hay
+  que pedirlo con `npm run db:seed -- --force`. Antes de la guarda, correrlo
+  mientras se verificaba algo borraba lo que el usuario había cargado a mano.
 - `BACKLOG.md` — lo pendiente, con el motivo de cada cosa
 
 `income_sources.account_id` vincula cada fuente con su cuenta de ingreso. Es por
