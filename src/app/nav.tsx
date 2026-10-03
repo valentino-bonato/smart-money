@@ -28,10 +28,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
  */
 const LINKS = [
   { href: "/", label: "Cargar", icon: PlusCircle },
+  // Presupuesto va segunda: después de cargar un gasto, la pregunta que sigue
+  // es "¿cuánto me queda de eso?". Estaba quinta, detrás de tres pantallas que
+  // se abren mucho menos.
+  { href: "/presupuesto", label: "Presupuesto", icon: Scale },
   { href: "/mover", label: "Mover", icon: ArrowLeftRight },
   { href: "/sobres", label: "Sobres", icon: Wallet },
   { href: "/plan", label: "Plan", icon: Target },
-  { href: "/presupuesto", label: "Presupuesto", icon: Scale },
   { href: "/conciliacion", label: "Conciliar", icon: CheckCheck },
 ] as const;
 

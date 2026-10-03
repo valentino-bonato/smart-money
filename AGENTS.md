@@ -258,12 +258,15 @@ explícito antes de parsear.
 
 ## Pantalla de presupuesto
 
-`/presupuesto` — lo asignado este mes contra lo gastado, por sobre.
+`/presupuesto` — lo asignado este mes contra lo gastado, por sobre. Va
+**segunda en el nav**: después de cargar un gasto, la pregunta que sigue es
+"¿cuánto me queda de eso?". Estaba quinta, detrás de tres pantallas que se
+abren mucho menos.
 
 **Roza el límite de §7** ("sin dashboards, gráficos ni reportes en el v1"). Se
 construyó igual, pedido explícito del usuario, con este criterio: no es un
 tablero de métricas, es la pregunta central de un sistema de sobres — ¿me estoy
-pasando o no? No tiene gráficos ni KPIs: una lista, una barra de progreso y la
+pasando o no? No tiene gráficos ni KPIs: tarjetas, una barra de progreso y la
 marca del día del mes.
 
 Responde algo que la pantalla de sobres **no** puede: ahí el saldo es acumulado
@@ -274,9 +277,35 @@ sobre con saldo alto puede estar gastando de más este mes sin que se note.
   plata entre sobres a mitad de mes cambia el presupuesto de verdad.
 - La comparación se hace en pesos porque un sobre puede recibir pesos y gastar
   dólares (Suscripciones es exactamente eso). El detalle por moneda se muestra
-  aparte; no se guarda ningún saldo convertido.
-- La marca vertical en la barra es el día del mes. Sin esa vara, un 60% gastado
-  no dice nada: depende de si es día 5 o día 25.
+  aparte; no se guarda ningún saldo convertido. Los totales del mes suman con
+  `sumAmounts` (BigInt), no con `Number`.
+- Los sobres sin nada asignado y sin nada gastado no se muestran: ocupan una
+  tarjeta entera para decir que no pasó nada.
+
+### Sin colores, a propósito
+
+El usuario pidió la estructura de una referencia que codificaba el estado en
+rojo/amarillo/verde, y explícitamente **no** sus colores. El estado se dice con
+palabras ("Te pasaste por $25.771") y se marca con el borde de la tarjeta, que
+es el mismo gris del tema un poco más fuerte. Un color por estado en una grilla
+de doce tarjetas vuelve la pantalla un semáforo.
+
+Por eso tampoco se usa `<Amount>` acá: su `tone="auto"` pinta el negativo de
+rojo, que es la regla del resto de la app y justo lo que esta pantalla no
+quiere.
+
+El excedente se muestra **rayado** sobre el relleno de la barra, en escala. Es
+la forma de mostrar que se pasó sin recurrir al rojo.
+
+### La marca del día del mes
+
+Es la mitad del sentido de la barra: un 60% gastado no dice nada hasta saber si
+es día 5 o día 25. Por eso la barra es propia y no el `Progress` del registry.
+
+**La marca sobresale de la barra en vez de cruzarla.** Cruzándola desaparecía
+apenas el gasto la pasaba —una línea gris encima del relleno negro—, que es
+justo cuando hay algo para ver. Ahora la pista va dentro de una caja más alta y
+la marca la pasa por arriba y por abajo, así se ve con la barra vacía o llena.
 
 ## Layout
 
