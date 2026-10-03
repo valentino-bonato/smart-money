@@ -3,6 +3,17 @@
 import { useActionState } from "react";
 import { reconcileAction, type ReconcileState } from "./actions";
 import { formatMoney } from "@/lib/money";
+import { AccountDot } from "@/components/account-name";
+import { Amount } from "@/components/money";
+import { FormStatus } from "@/components/form-status";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export type AccountRow = {
   accountId: string;
@@ -13,9 +24,6 @@ export type AccountRow = {
 };
 
 const initial: ReconcileState = { status: "idle" };
-
-const field =
-  "rounded-lg border border-black/15 dark:border-white/20 bg-transparent px-3 py-2 outline-none focus:border-black/50 dark:focus:border-white/50";
 
 export function ReconcileForm({
   accounts,
@@ -36,38 +44,43 @@ export function ReconcileForm({
         pending={pending}
       />
 
-      {state.status === "error" ? (
-        <p role="status" className="text-sm text-red-600 dark:text-red-400">
-          {state.message}
-        </p>
-      ) : null}
+      <FormStatus
+        status={state.status === "error" ? "error" : "idle"}
+        message={state.status === "error" ? state.message : undefined}
+      />
 
       {state.status === "ok" ? (
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs uppercase tracking-wide opacity-60">
-            Resultado
-          </h3>
-          <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
+          <h3 className="text-sm font-medium">Resultado</h3>
+          <ul className="divide-y">
             {state.results.map((r) => (
-              <li key={r.accountId} className="py-2 flex flex-col gap-0.5">
+              <li key={r.accountId} className="flex flex-col gap-0.5 py-2">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span>{r.name}</span>
-                  <span
-                    className={`tabular-nums shrink-0 ${
-                      r.matched
-                        ? "text-green-700 dark:text-green-400"
-                        : "text-red-600 dark:text-red-400"
-                    }`}
-                  >
-                    {r.matched
-                      ? "coincide"
-                      : formatMoney(r.difference, r.currency, { sign: true })}
+                  <span className="flex items-baseline gap-2 text-sm">
+                    <AccountDot name={r.name} />
+                    {r.name}
                   </span>
+                  {r.matched ? (
+                    <span className="shrink-0 text-sm text-positive">
+                      coincide
+                    </span>
+                  ) : (
+                    <Amount
+                      amount={r.difference}
+                      currency={r.currency}
+                      sign
+                      tone="negative"
+                      className="shrink-0 text-sm"
+                    />
+                  )}
                 </div>
                 {!r.matched ? (
-                  <span className="text-xs opacity-60">
-                    homebanking {formatMoney(r.statementBalance, r.currency)} ·
-                    app {formatMoney(r.computedBalance, r.currency)} ·{" "}
+                  <span className="text-xs text-muted-foreground">
+                    <span className="money">
+                      homebanking {formatMoney(r.statementBalance, r.currency)} ·
+                      app {formatMoney(r.computedBalance, r.currency)}
+                    </span>{" "}
+                    ·{" "}
                     {Number(r.difference) > 0
                       ? "el banco tiene más: falta cargar un ingreso, o hay un gasto cargado que no existió"
                       : "el banco tiene menos: falta cargar un gasto"}
@@ -94,53 +107,59 @@ function Fields({
   pending: boolean;
 }) {
   return (
-    <form action={action} className="flex flex-col gap-4">
-      <label className="flex flex-col gap-1 max-w-48">
-        <span className="text-xs uppercase tracking-wide opacity-60">
-          Fecha del saldo
-        </span>
-        <input
-          type="date"
-          name="date"
-          defaultValue={today}
-          required
-          className={field}
-        />
-      </label>
+    <form action={action}>
+      <FieldGroup className="gap-4">
+        <Field className="max-w-48">
+          <FieldLabel htmlFor="reconcile-date">Fecha del saldo</FieldLabel>
+          <Input
+            id="reconcile-date"
+            type="date"
+            name="date"
+            defaultValue={today}
+            required
+            className="h-9"
+          />
+        </Field>
 
-      <ul className="flex flex-col gap-3">
-        {accounts.map((a) => (
-          <li key={a.accountId} className="flex flex-col gap-1">
-            <input type="hidden" name="accountId" value={a.accountId} />
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm">{a.name}</span>
-              <span className="text-xs opacity-55 tabular-nums">
-                app: {formatMoney(a.computedBalance, a.currency)}
-              </span>
-            </div>
-            <input
-              name="statementBalance"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder={`saldo del homebanking en ${a.currency}`}
-              className={`${field} tabular-nums`}
-            />
-          </li>
-        ))}
-      </ul>
+        <FieldGroup className="gap-3">
+          {accounts.map((a) => (
+            <Field key={a.accountId}>
+              <input type="hidden" name="accountId" value={a.accountId} />
+              <div className="flex items-baseline justify-between gap-3">
+                <FieldLabel
+                  htmlFor={`statement-${a.accountId}`}
+                  className="items-baseline"
+                >
+                  <AccountDot name={a.name} />
+                  {a.name}
+                </FieldLabel>
+                <span className="money text-xs text-muted-foreground">
+                  app: {formatMoney(a.computedBalance, a.currency)}
+                </span>
+              </div>
+              <Input
+                id={`statement-${a.accountId}`}
+                name="statementBalance"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder={`saldo del homebanking en ${a.currency}`}
+                className="money h-9"
+              />
+            </Field>
+          ))}
+        </FieldGroup>
 
-      <p className="text-xs opacity-55">
-        Las que dejes en blanco no se concilian. Para una tarjeta, el saldo va
-        negativo si debés plata.
-      </p>
-
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-lg bg-foreground text-background px-4 py-3 font-medium disabled:opacity-50"
-      >
-        {pending ? "Comparando…" : "Comparar con el homebanking"}
-      </button>
+        <Field>
+          <Button type="submit" size="lg" disabled={pending} className="h-11">
+            {pending ? "Comparando…" : "Comparar con el homebanking"}
+          </Button>
+          <FieldDescription className="text-xs">
+            Las que dejes en blanco no se concilian — guardar un cero por una
+            cuenta que no se miró sería mentira. Para una tarjeta, el saldo va
+            negativo si debés plata.
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }

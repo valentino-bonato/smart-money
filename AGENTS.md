@@ -284,12 +284,124 @@ Una sola regla: **el teléfono no se toca.** Es donde se cargan los gastos y es
 el criterio de §8. El contenedor sigue siendo `max-w-xl` y todo apilado; recién
 en `lg:` se ensancha a `max-w-6xl` y pasa a dos columnas.
 
+El chasis vive en `src/components/page.tsx` (`PageShell`, `PageHeader`,
+`TwoColumn`) y no copiado en seis `page.tsx`: estaba copiado y las seis se
+fueron separando de a poco.
+
 En cada pantalla la columna izquierda es lo que se hace y la derecha lo que se
-mira — salvo en sobres, donde el formulario va con `lg:order-first` para que el
-pool quede arriba a la izquierda y la lista de sobres ocupe el alto.
+mira — salvo en sobres, que pasa `flip` para que el pool quede arriba a la
+izquierda y la lista de sobres ocupe el alto.
 
 El nav vive en `src/app/nav.tsx` y lo monta el layout. Antes cada pantalla
-repetía sus links, así que agregar una obligaba a tocar las cinco.
+repetía sus links, así que agregar una obligaba a tocar las cinco. Los íconos
+solo aparecen en `sm:`: en el teléfono el texto solo ya ocupa dos renglones.
+
+## Sistema de diseño: shadcn
+
+`components.json` con el preset **nova** sobre **radix**, base neutral, tokens
+en variables CSS. Los componentes son código nuestro en `src/components/ui/` —
+se editan, no se actualizan. `npx shadcn@latest add <x>` trae uno nuevo.
+
+Encima de la paleta de shadcn hay tres tokens propios en `globals.css`:
+`positive`, `negative` y `warning`. Existen para que el rojo de un sobre en
+negativo y el de un presupuesto pasado sean el mismo color y un solo lugar.
+`negative` **es** `destructive` a propósito: un sobre en rojo es la misma
+urgencia que un error, y tenerlos distintos los vuelve ruido.
+
+Tres piezas compartidas que no conviene saltear:
+
+- **`<Amount>`** (`src/components/money.tsx`) — todo monto pasa por acá:
+  `tabular-nums` siempre y una sola decisión de color. `tone="plain"` es para
+  donde el negativo es normal y no una alarma (una tarjeta debe plata por
+  definición).
+- **`<FormStatus>`** — el resultado de un server action. Lo tenían las cinco
+  pantallas con su propio `<p>` de colores, y un error de carga se veía más
+  chico que uno de conciliación.
+- **`<TransactionList>`** — la lista de últimos movimientos, compartida entre
+  Cargar y Mover.
+
+### El select es nativo, no el de shadcn
+
+`src/components/ui/native-select.tsx` es un `<select>` de verdad con la pinta
+del Select del registry. El del registry es un listbox de Radix y en el teléfono
+es peor: pierde la rueda nativa de iOS y Android, que es la razón por la que
+elegir sobre y categoría cuesta dos toques. §8 pone el límite en ~10 segundos
+por gasto, así que gana la plataforma y shadcn pone solo el estilo. De paso
+sigue siendo un control de formulario de verdad, sin input oculto ni estado
+controlado para que el server action lo reciba.
+
+**Esto vale para cualquier componente del registry que se quiera traer**: si
+reemplaza un control nativo en el camino de carga, el nativo gana.
+
+### Un color de marca por institución
+
+`src/lib/institutions.ts` mapea el nombre de la cuenta a su institución; los
+valores viven en `globals.css` como `--bank-*`. Hoy: BBVA (azul), Mercado Pago
+(amarillo), Cocos Capital (cian) y Ualá (rosa).
+
+Para qué: las cuentas se leen en listas donde el nombre es largo y parecido
+—"BBVA caja de ahorro", "BBVA caja de ahorro en dólares", "Tarjeta de crédito
+BBVA — USD"—, y conciliar es ir y volver con el homebanking. Un punto de color
+le da a cada renglón un ancla que se reconoce antes de leer el texto.
+
+**El tono de marca es el ancla, no la regla.** La primera versión usó el color
+documentado de cada una y fue inútil: BBVA, Cocos y Ualá son las tres azules en
+la vida real, así que la lista de conciliación quedaba con ocho puntos del mismo
+color. Lo que importa es que se distingan entre sí a 10px. Dónde se corrió:
+
+- **Ualá** usa su rosa (#ff5c98), que es el acento real de la marca —el de la
+  tilde del logo—, no su azul.
+- **Cocos** va corrido de su azul documentado (#0062e1) hacia el cian. Es la
+  única de las cuatro que no es fiel, y es a propósito: sin eso es
+  indistinguible de BBVA.
+
+Lo demás que no conviene deshacer:
+
+- **Es un acento, no un tema.** El color aparece en un punto de 10px y nada
+  más. Pintar la fila entera haría que una lista de seis cuentas parezca un
+  gráfico, y §7 no quiere tableros.
+- **Cada marca tiene variante clara y oscura.** El color crudo no sirve en los
+  dos temas: el azul de BBVA (#004481) es casi negro sobre fondo oscuro y el
+  amarillo de Mercado Pago (#ffe600) es invisible sobre blanco.
+- **El color va en `style`, no en una clase.** Una clase armada como
+  `bg-bank-${key}` no la ve el escáner de Tailwind: compila en dev y sale sin
+  color en el build.
+- **El match es tolerante y no una lista de nombres exactos.** Las cuentas las
+  nombra el usuario; "BBVA caja de ahorro en dólares" tiene que caer en BBVA sin
+  mantenimiento. Una cuenta que no matchea ninguna no es un error —"Me deben" no
+  es un banco— y se dibuja con el gris neutro del tema.
+
+Dónde aparece: conciliación (es donde más rinde), las líneas de pago y
+transferencia del plan, y el saldo debajo de cada selector en Mover. **No** en
+un `<option>`: ningún navegador lo pinta, así que ahí el color va en la línea de
+saldo, que de paso cambia con la selección.
+
+### Tema claro y oscuro
+
+Tres opciones —claro, oscuro, el del sistema— con el toggle en el nav. Son
+treinta líneas propias en `src/lib/theme.ts` y **no `next-themes`**: su provider
+es un componente de cliente que renderiza un `<script>`, y React 19 lo rechaza
+con "Encountered a script tag while rendering React component". El overlay de
+error de dev terminaba tapando la pantalla entera.
+
+- `ThemeScript` se renderiza desde el layout, que es un Server Component, donde
+  el `<script>` inline es legal y corre. Tiene que ser bloqueante: si la clase
+  se aplicara al hidratar, la app arrancaría en claro y pegaría un flash a
+  oscuro en cada carga.
+- El script además escucha `prefers-color-scheme`, así que con "el del sistema"
+  elegido el tema cambia solo sin que React se entere.
+- `suppressHydrationWarning` en el `<html>` es obligatorio: el script le pone la
+  clase antes de hidratar, así que el markup del servidor y el del cliente
+  difieren a propósito.
+- El toggle lee la preferencia con `useSyncExternalStore`, no con un efecto —el
+  proyecto rechaza `setState` adentro de un efecto, y esto es justamente lo que
+  `useSyncExternalStore` resuelve.
+- El ícono no se renderiza según el tema: en el render del servidor todavía no
+  se sabe cuál es, así que parpadearía. Se muestran el sol y la luna y los
+  esconde CSS, que ya corre con la clase puesta.
+
+La tipografía va en `--font-sans` (no `--font-geist-sans`): es la variable que
+los componentes del registry esperan.
 
 ## Pantalla de carga
 

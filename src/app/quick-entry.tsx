@@ -2,7 +2,17 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { recordExpenseAction, type QuickEntryState } from "./actions";
-import { formatMoney } from "@/lib/money";
+import { Amount } from "@/components/money";
+import { FormStatus } from "@/components/form-status";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 
 export type Option = { id: string; name: string; currency: "ARS" | "USD" };
 export type EnvelopeOption = Option & { balance: string };
@@ -26,10 +36,6 @@ type Props = {
 
 const initial: QuickEntryState = { status: "idle" };
 
-const field =
-  "rounded-lg border border-black/15 dark:border-white/20 bg-transparent px-3 py-2 outline-none focus:border-black/50 dark:focus:border-white/50";
-const label = "text-xs uppercase tracking-wide opacity-60";
-
 export function QuickEntry(props: Props) {
   const [state, action, pending] = useActionState(recordExpenseAction, initial);
 
@@ -44,18 +50,10 @@ export function QuickEntry(props: Props) {
         action={action}
         pending={pending}
       />
-      {state.status !== "idle" ? (
-        <p
-          role="status"
-          className={`text-sm ${
-            state.status === "error"
-              ? "text-red-600 dark:text-red-400"
-              : "text-green-700 dark:text-green-400"
-          }`}
-        >
-          {state.message}
-        </p>
-      ) : null}
+      <FormStatus
+        status={state.status}
+        message={state.status === "idle" ? undefined : state.message}
+      />
     </div>
   );
 }
@@ -109,134 +107,165 @@ function EntryFields({
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={action}>
       <input type="hidden" name="currency" value={currency} />
 
-      <label className="flex flex-col gap-1">
-        <span className={label}>
-          Monto {currency === "USD" ? "(USD)" : "(ARS)"}
-        </span>
-        <input
-          name="amount"
-          inputMode="decimal"
-          autoFocus
-          autoComplete="off"
-          placeholder="25.000"
-          required
-          className={`${field} py-3 text-3xl tabular-nums`}
-        />
-      </label>
+      <FieldGroup className="gap-4">
+        {/* El monto es lo primero y ocupa el alto de dos campos: es el único
+            dato que no se puede sugerir, y el teclado tiene que abrirse ahí. */}
+        <Field>
+          <FieldLabel htmlFor="amount">
+            Monto{" "}
+            <span className="font-normal text-muted-foreground">
+              en {currency === "USD" ? "dólares" : "pesos"}
+            </span>
+          </FieldLabel>
+          <div className="relative">
+            <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-2xl text-muted-foreground">
+              {currency === "USD" ? "US$" : "$"}
+            </span>
+            <Input
+              id="amount"
+              name="amount"
+              inputMode="decimal"
+              autoFocus
+              autoComplete="off"
+              placeholder="25.000"
+              required
+              className="money h-16 pl-14 text-3xl! font-medium"
+            />
+          </div>
+        </Field>
 
-      <label className="flex flex-col gap-1">
-        <span className={label}>Comercio</span>
-        <input
-          name="payee"
-          list="payees"
-          autoComplete="off"
-          placeholder="Coto"
-          value={payee}
-          onChange={(e) => {
-            setPayee(e.target.value);
-            applySuggestion(e.target.value);
-          }}
-          onBlur={(e) => applySuggestion(e.target.value)}
-          className={field}
-        />
-        <datalist id="payees">
-          {suggestions.map((s) => (
-            <option key={s.payee} value={s.payee} />
-          ))}
-        </datalist>
-      </label>
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className={label}>Categoría</span>
-          <select
-            name="expenseAccountId"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            required
-            className={field}
-          >
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name.replace(/^Gastos:/, "")}
-                {c.currency === "USD" ? " (USD)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className={label}>Sobre</span>
-          <select
-            name="envelopeId"
-            value={envelopeId}
-            onChange={(e) => setEnvelopeId(e.target.value)}
-            required
-            className={field}
-          >
-            <option value="">Elegí un sobre…</option>
-            {envelopes.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* El saldo del sobre, en el momento en que importa: justo antes de
-          gastar. Responde "¿me queda plata de amigos?" sin cambiar de
-          pantalla. Puede ser negativo, y se dice. */}
-      {envelope ? (
-        <p className="text-sm opacity-70">
-          {envelope.name}: queda{" "}
-          <strong className={negative ? "text-red-600 dark:text-red-400" : ""}>
-            {formatMoney(envelope.balance, envelope.currency)}
-          </strong>
-          {negative ? " — en negativo, hay que cubrirlo de otro sobre" : ""}
-        </p>
-      ) : null}
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className={label}>Salió de</span>
-          <select
-            name="paidFromAccountId"
-            value={effectiveSourceId}
-            onChange={(e) => setSourceId(e.target.value)}
-            required
-            className={field}
-          >
-            {validSources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className={label}>Fecha</span>
-          <input
-            type="date"
-            name="date"
-            defaultValue={today}
-            required
-            className={field}
+        <Field>
+          <FieldLabel htmlFor="payee">Comercio</FieldLabel>
+          <Input
+            id="payee"
+            name="payee"
+            list="payees"
+            autoComplete="off"
+            placeholder="Coto"
+            value={payee}
+            onChange={(e) => {
+              setPayee(e.target.value);
+              applySuggestion(e.target.value);
+            }}
+            onBlur={(e) => applySuggestion(e.target.value)}
+            className="h-9"
           />
-        </label>
-      </div>
+          <datalist id="payees">
+            {suggestions.map((s) => (
+              <option key={s.payee} value={s.payee} />
+            ))}
+          </datalist>
+        </Field>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-lg bg-foreground text-background px-4 py-3 font-medium disabled:opacity-50"
-      >
-        {pending ? "Guardando…" : "Cargar gasto"}
-      </button>
+        <div className="grid grid-cols-2 gap-3">
+          <Field>
+            <FieldLabel htmlFor="expenseAccountId">Categoría</FieldLabel>
+            <NativeSelect
+              id="expenseAccountId"
+              name="expenseAccountId"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              required
+            >
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name.replace(/^Gastos:/, "")}
+                  {c.currency === "USD" ? " (USD)" : ""}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="envelopeId">Sobre</FieldLabel>
+            <NativeSelect
+              id="envelopeId"
+              name="envelopeId"
+              value={envelopeId}
+              onChange={(e) => setEnvelopeId(e.target.value)}
+              required
+            >
+              <option value="">Elegí un sobre…</option>
+              {envelopes.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
+
+        {/* El saldo del sobre, en el momento en que importa: justo antes de
+            gastar. Responde "¿me queda plata de amigos?" sin cambiar de
+            pantalla. Puede ser negativo, y se dice. */}
+        {envelope ? (
+          <div
+            className={`flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-sm ${
+              negative
+                ? "bg-negative/10 text-negative"
+                : "bg-muted text-muted-foreground"
+            }`}
+          >
+            <span>
+              Queda en <strong className="font-medium">{envelope.name}</strong>
+            </span>
+            <Amount
+              amount={envelope.balance}
+              currency={envelope.currency}
+              className="font-medium"
+            />
+            {negative ? (
+              <span className="w-full text-xs">
+                En negativo — hay que cubrirlo de otro sobre.
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field>
+            <FieldLabel htmlFor="paidFromAccountId">Salió de</FieldLabel>
+            <NativeSelect
+              id="paidFromAccountId"
+              name="paidFromAccountId"
+              value={effectiveSourceId}
+              onChange={(e) => setSourceId(e.target.value)}
+              required
+            >
+              {validSources.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="date">Fecha</FieldLabel>
+            <Input
+              id="date"
+              type="date"
+              name="date"
+              defaultValue={today}
+              required
+              className="h-9"
+            />
+          </Field>
+        </div>
+
+        <Field>
+          <Button type="submit" size="lg" disabled={pending} className="h-11">
+            {pending ? "Guardando…" : "Cargar gasto"}
+          </Button>
+          <FieldDescription className="text-xs">
+            La moneda no se pide: la define la categoría, y las cuentas de
+            origen se filtran a esa misma moneda.
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }

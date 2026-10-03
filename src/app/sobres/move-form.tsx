@@ -3,14 +3,15 @@
 import { useActionState, useState } from "react";
 import { moveAllocationAction, type MoveState } from "./actions";
 import { POOL } from "./pool";
+import { FormStatus } from "@/components/form-status";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 
 export type MoveTarget = { id: string; name: string };
 
 const initial: MoveState = { status: "idle" };
-
-const field =
-  "rounded-lg border border-black/15 dark:border-white/20 bg-transparent px-3 py-2 outline-none focus:border-black/50 dark:focus:border-white/50";
-const label = "text-xs uppercase tracking-wide opacity-60";
 
 export function MoveForm({
   envelopes,
@@ -45,18 +46,10 @@ export function MoveForm({
         defaultCurrency={defaultCurrency}
         defaultAmount={defaultAmount}
       />
-      {state.status !== "idle" ? (
-        <p
-          role="status"
-          className={`text-sm ${
-            state.status === "error"
-              ? "text-red-600 dark:text-red-400"
-              : "text-green-700 dark:text-green-400"
-          }`}
-        >
-          {state.message}
-        </p>
-      ) : null}
+      <FormStatus
+        status={state.status}
+        message={state.status === "idle" ? undefined : state.message}
+      />
     </div>
   );
 }
@@ -87,98 +80,100 @@ function Fields({
   const sameTarget = from === to;
 
   return (
-    <form action={action} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className={label}>De</span>
-          <select
-            name="from"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className={field}
-          >
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={label}>A</span>
-          <select
-            name="to"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className={field}
-          >
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+    <form action={action}>
+      <FieldGroup className="gap-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Field>
+            <FieldLabel htmlFor="move-from">De</FieldLabel>
+            <NativeSelect
+              id="move-from"
+              name="from"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            >
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="move-to">A</FieldLabel>
+            <NativeSelect
+              id="move-to"
+              name="to"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            >
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
 
-      <div className="grid grid-cols-[1fr_auto_auto] gap-3">
-        <label className="flex flex-col gap-1">
-          <span className={label}>Monto</span>
-          <input
-            name="amount"
-            inputMode="decimal"
+        <div className="grid grid-cols-[1fr_auto_auto] gap-3">
+          <Field>
+            <FieldLabel htmlFor="move-amount">Monto</FieldLabel>
+            <Input
+              id="move-amount"
+              name="amount"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="30,18"
+              defaultValue={defaultAmount}
+              required
+              className="money h-9"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="move-currency">Moneda</FieldLabel>
+            <NativeSelect
+              id="move-currency"
+              name="currency"
+              defaultValue={defaultCurrency ?? "ARS"}
+              className="w-auto"
+            >
+              <option value="ARS">ARS</option>
+              <option value="USD">USD</option>
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="move-date">Fecha</FieldLabel>
+            <Input
+              id="move-date"
+              type="date"
+              name="date"
+              defaultValue={today}
+              required
+              className="h-9"
+            />
+          </Field>
+        </div>
+
+        <Field>
+          <FieldLabel htmlFor="move-note">Nota (opcional)</FieldLabel>
+          <Input
+            id="move-note"
+            name="note"
             autoComplete="off"
-            placeholder="30,18"
-            defaultValue={defaultAmount}
-            required
-            className={`${field} tabular-nums`}
+            placeholder="Cubro el Notion atípico"
+            className="h-9"
           />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={label}>Moneda</span>
-          <select
-            name="currency"
-            defaultValue={defaultCurrency ?? "ARS"}
-            className={field}
-          >
-            <option value="ARS">ARS</option>
-            <option value="USD">USD</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={label}>Fecha</span>
-          <input
-            type="date"
-            name="date"
-            defaultValue={today}
-            required
-            className={field}
-          />
-        </label>
-      </div>
+        </Field>
 
-      <label className="flex flex-col gap-1">
-        <span className={label}>Nota (opcional)</span>
-        <input
-          name="note"
-          autoComplete="off"
-          placeholder="Cubro el Notion atípico"
-          className={field}
-        />
-      </label>
-
-      <button
-        type="submit"
-        disabled={pending || sameTarget}
-        className="rounded-lg bg-foreground text-background px-4 py-2.5 font-medium disabled:opacity-50"
-      >
-        {pending ? "Moviendo…" : "Mover"}
-      </button>
-      {sameTarget ? (
-        <p className="text-sm opacity-60">
-          El origen y el destino son el mismo.
-        </p>
-      ) : null}
+        <Button type="submit" disabled={pending || sameTarget} className="h-10">
+          {pending ? "Moviendo…" : "Mover"}
+        </Button>
+        {sameTarget ? (
+          <p className="text-sm text-muted-foreground">
+            El origen y el destino son el mismo.
+          </p>
+        ) : null}
+      </FieldGroup>
     </form>
   );
 }

@@ -3,6 +3,17 @@
 import { useActionState, useState } from "react";
 import { moveMoneyAction, type MoveMoneyState } from "./actions";
 import { formatMoney } from "@/lib/money";
+import { AccountDot } from "@/components/account-name";
+import { FormStatus } from "@/components/form-status";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 
 export type AccountOption = {
   id: string;
@@ -15,10 +26,6 @@ export type AccountOption = {
 export type EnvelopeOption = { id: string; name: string };
 
 const initial: MoveMoneyState = { status: "idle" };
-
-const field =
-  "rounded-lg border border-black/15 dark:border-white/20 bg-transparent px-3 py-2 outline-none focus:border-black/50 dark:focus:border-white/50";
-const label = "text-xs uppercase tracking-wide opacity-60";
 
 export function MoveMoneyForm(props: {
   accounts: AccountOption[];
@@ -35,18 +42,10 @@ export function MoveMoneyForm(props: {
         action={action}
         pending={pending}
       />
-      {state.status !== "idle" ? (
-        <p
-          role="status"
-          className={`text-sm ${
-            state.status === "error"
-              ? "text-red-600 dark:text-red-400"
-              : "text-green-700 dark:text-green-400"
-          }`}
-        >
-          {state.message}
-        </p>
-      ) : null}
+      <FormStatus
+        status={state.status}
+        message={state.status === "idle" ? undefined : state.message}
+      />
     </div>
   );
 }
@@ -88,165 +87,190 @@ function Fields({
   })();
 
   return (
-    <form action={action} className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className={label}>De</span>
-          <select
-            name="fromAccountId"
-            value={fromId}
-            onChange={(e) => setFromId(e.target.value)}
-            className={field}
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          {from ? (
-            <span className="text-xs opacity-50 tabular-nums">
-              tiene {formatMoney(from.balance, from.currency)}
-            </span>
-          ) : null}
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className={label}>A</span>
-          <select
-            name="toAccountId"
-            value={toId}
-            onChange={(e) => setToId(e.target.value)}
-            className={field}
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          {to ? (
-            <span className="text-xs opacity-50 tabular-nums">
-              tiene {formatMoney(to.balance, to.currency)}
-            </span>
-          ) : null}
-        </label>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className={label}>
-            {isExchange ? `Sale (${from?.currency})` : "Monto"}
-          </span>
-          <input
-            name="amount"
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="80.000"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-            className={`${field} text-xl tabular-nums`}
-          />
-        </label>
-
-        {isExchange ? (
-          <label className="flex flex-col gap-1">
-            <span className={label}>Entra ({to?.currency})</span>
-            <input
-              name="receivedAmount"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder={suggested ?? "1.290,32"}
-              required
-              className={`${field} text-xl tabular-nums`}
-            />
-            {suggested ? (
-              <span className="text-xs opacity-50">
-                al oficial serían {suggested}
-              </span>
-            ) : null}
-          </label>
-        ) : (
-          <label className="flex flex-col gap-1">
-            <span className={label}>Fecha</span>
-            <input
-              type="date"
-              name="date"
-              defaultValue={today}
-              required
-              className={field}
-            />
-          </label>
-        )}
-      </div>
-
-      {isExchange ? (
+    <form action={action}>
+      <FieldGroup className="gap-4">
         <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1">
-            <span className={label}>¿De qué sobre es esta plata?</span>
-            <select name="envelopeId" defaultValue="" className={field}>
-              <option value="">De ninguno en particular</option>
-              {envelopes.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
+          <Field>
+            <FieldLabel htmlFor="fromAccountId">De</FieldLabel>
+            <NativeSelect
+              id="fromAccountId"
+              name="fromAccountId"
+              value={fromId}
+              onChange={(e) => setFromId(e.target.value)}
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
                 </option>
               ))}
-            </select>
-            <span className="text-xs opacity-50">
-              Pasa su asignación a la nueva moneda.
-            </span>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className={label}>Fecha</span>
-            <input
-              type="date"
-              name="date"
-              defaultValue={today}
-              required
-              className={field}
-            />
-          </label>
+            </NativeSelect>
+            {/* El color no puede ir en el `<option>` —ningún navegador lo
+                pinta—, así que va en la línea del saldo, que de paso cambia con
+                la selección. */}
+            {from ? (
+              <FieldDescription className="flex items-baseline gap-1.5 text-xs">
+                <AccountDot name={from.name} />
+                <span className="money">
+                  tiene {formatMoney(from.balance, from.currency)}
+                </span>
+              </FieldDescription>
+            ) : null}
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="toAccountId">A</FieldLabel>
+            <NativeSelect
+              id="toAccountId"
+              name="toAccountId"
+              value={toId}
+              onChange={(e) => setToId(e.target.value)}
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </NativeSelect>
+            {to ? (
+              <FieldDescription className="flex items-baseline gap-1.5 text-xs">
+                <AccountDot name={to.name} />
+                <span className="money">
+                  tiene {formatMoney(to.balance, to.currency)}
+                </span>
+              </FieldDescription>
+            ) : null}
+          </Field>
         </div>
-      ) : null}
 
-      <label className="flex flex-col gap-1">
-        <span className={label}>Descripción (opcional)</span>
-        <input
-          name="description"
-          autoComplete="off"
-          placeholder={
-            isCardPayment
-              ? "Pago del resumen"
+        <div className="grid grid-cols-2 gap-3">
+          <Field>
+            <FieldLabel htmlFor="amount">
+              {isExchange ? `Sale (${from?.currency})` : "Monto"}
+            </FieldLabel>
+            <Input
+              id="amount"
+              name="amount"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="80.000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+              className="money h-11 text-xl!"
+            />
+          </Field>
+
+          {isExchange ? (
+            <Field>
+              <FieldLabel htmlFor="receivedAmount">
+                Entra ({to?.currency})
+              </FieldLabel>
+              <Input
+                id="receivedAmount"
+                name="receivedAmount"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder={suggested ?? "1.290,32"}
+                required
+                className="money h-11 text-xl!"
+              />
+              {/* Sugerencia al oficial, nada más: el monto que vale es el del
+                  cambio que de verdad se hizo. */}
+              {suggested ? (
+                <FieldDescription className="money text-xs">
+                  al oficial serían {suggested}
+                </FieldDescription>
+              ) : null}
+            </Field>
+          ) : (
+            <Field>
+              <FieldLabel htmlFor="date">Fecha</FieldLabel>
+              <Input
+                id="date"
+                type="date"
+                name="date"
+                defaultValue={today}
+                required
+                className="h-11"
+              />
+            </Field>
+          )}
+        </div>
+
+        {isExchange ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field>
+              <FieldLabel htmlFor="envelopeId">
+                ¿De qué sobre es esta plata?
+              </FieldLabel>
+              <NativeSelect id="envelopeId" name="envelopeId" defaultValue="">
+                <option value="">De ninguno en particular</option>
+                {envelopes.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              <FieldDescription className="text-xs">
+                Pasa su asignación a la nueva moneda. Sin esto el sobre dice
+                tener pesos que ya no existen.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="exchange-date">Fecha</FieldLabel>
+              <Input
+                id="exchange-date"
+                type="date"
+                name="date"
+                defaultValue={today}
+                required
+                className="h-9"
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        <Field>
+          <FieldLabel htmlFor="description">Descripción (opcional)</FieldLabel>
+          <Input
+            id="description"
+            name="description"
+            autoComplete="off"
+            placeholder={
+              isCardPayment
+                ? "Pago del resumen"
+                : isExchange
+                  ? "Compra de dólares"
+                  : "Reposición de Mercado Pago"
+            }
+            className="h-9"
+          />
+        </Field>
+
+        <Field>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={pending || sameAccount}
+            className="h-11"
+          >
+            {pending
+              ? "Registrando…"
               : isExchange
-                ? "Compra de dólares"
-                : "Reposición de Mercado Pago"
-          }
-          className={field}
-        />
-      </label>
-
-      <button
-        type="submit"
-        disabled={pending || sameAccount}
-        className="rounded-lg bg-foreground text-background px-4 py-3 font-medium disabled:opacity-50"
-      >
-        {pending
-          ? "Registrando…"
-          : isExchange
-            ? "Registrar el cambio"
-            : isCardPayment
-              ? "Registrar el pago"
-              : "Registrar la transferencia"}
-      </button>
-
-      <p className="text-xs opacity-55">
-        {sameAccount
-          ? "Las dos cuentas son la misma."
-          : isExchange
-            ? "La app mete sola las partidas de cambio. El invariante es por moneda: un asiento no puede tener pesos de un lado y dólares del otro."
-            : "Esto no es un gasto y no toca ningún sobre: la plata cambia de cuenta, no de propósito."}
-      </p>
+                ? "Registrar el cambio"
+                : isCardPayment
+                  ? "Registrar el pago"
+                  : "Registrar la transferencia"}
+          </Button>
+          <FieldDescription className="text-xs">
+            {sameAccount
+              ? "Las dos cuentas son la misma."
+              : isExchange
+                ? "La app mete sola las partidas de cambio. El invariante es por moneda: un asiento no puede tener pesos de un lado y dólares del otro."
+                : "Esto no es un gasto y no toca ningún sobre: la plata cambia de cuenta, no de propósito."}
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }

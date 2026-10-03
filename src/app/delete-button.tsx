@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { XIcon } from "lucide-react";
 import { deleteTransactionAction } from "./actions";
+import { Button } from "@/components/ui/button";
 
 /**
  * Borrar pide un segundo clic. No es un diálogo: es el mismo botón que cambia.
@@ -13,35 +15,35 @@ export function DeleteButton({ id }: { id: string }) {
 
   if (!armed) {
     return (
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon-xs"
         onClick={() => setArmed(true)}
         aria-label="Borrar movimiento"
-        className="text-xs opacity-30 hover:opacity-80 px-1"
+        className="shrink-0 text-muted-foreground opacity-50 hover:opacity-100"
       >
-        ✕
-      </button>
+        <XIcon />
+      </Button>
     );
   }
 
   return (
-    <span className="flex items-center gap-2 text-xs">
+    <span className="flex shrink-0 items-center gap-1">
       <form action={deleteTransactionAction}>
         <input type="hidden" name="id" value={id} />
-        <button
-          type="submit"
-          className="text-red-600 dark:text-red-400 underline"
-        >
-          borrar
-        </button>
+        <Button type="submit" variant="destructive" size="xs">
+          Borrar
+        </Button>
       </form>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="xs"
         onClick={() => setArmed(false)}
-        className="opacity-50 underline"
       >
-        no
-      </button>
+        No
+      </Button>
     </span>
   );
 }

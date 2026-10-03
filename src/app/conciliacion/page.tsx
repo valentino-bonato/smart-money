@@ -4,8 +4,19 @@ import {
   reconcilableAccounts,
   reconciliationHistory,
 } from "@/db/reconcile";
-import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
+import { AccountName } from "@/components/account-name";
+import { Amount } from "@/components/money";
+import { PageHeader, PageShell, TwoColumn } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { adjustAction, ignoreAction } from "./actions";
 import { ReconcileForm } from "./reconcile-form";
 
@@ -31,160 +42,192 @@ export default async function ConciliacionPage() {
   const unresolved = history.filter((h) => !h.resolved);
 
   return (
-    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Conciliación</h1>
-
-      <p className="text-sm opacity-70">
+    <PageShell>
+      <PageHeader title="Conciliación">
         Pegá los saldos del homebanking y la app dice la diferencia. Si cierran
         al peso, el historial está completo y el planner puede confiar en él.
-      </p>
+      </PageHeader>
 
-      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
-      <div className="flex flex-col gap-8">
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Saldos del homebanking
-        </h2>
-        <ReconcileForm
-          accounts={accounts.map((a) => ({
-            accountId: a.accountId,
-            name: a.name,
-            currency: a.currency,
-            computedBalance: a.computedBalance,
-            lastReconciledAt: a.lastReconciledAt,
-          }))}
-          today={today}
-        />
-      </section>
+      <TwoColumn
+        main={
+          <Card>
+            <CardHeader>
+              <CardTitle>Saldos del homebanking</CardTitle>
+              <CardDescription>
+                La diferencia es el saldo del banco menos el de la app, y la
+                resta se hace en la base. Positiva: falta cargar un ingreso.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ReconcileForm
+                accounts={accounts.map((a) => ({
+                  accountId: a.accountId,
+                  name: a.name,
+                  currency: a.currency,
+                  computedBalance: a.computedBalance,
+                  lastReconciledAt: a.lastReconciledAt,
+                }))}
+                today={today}
+              />
+            </CardContent>
+          </Card>
+        }
+        aside={
+          <>
+            {/* La segunda mitad, que es la que vale: qué es lo más probable que
+                falte. No adivina gastos sueltos — apunta a lo que la app ya
+                sabe que tiene que pasar y todavía no vio. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Probablemente falte cargar esto</CardTitle>
+                <CardDescription>
+                  Gastos fijos del mes sin cargo generado, y cobros esperados
+                  cuya fecha ya pasó.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {missing.length ? (
+                  <>
+                    <ul className="divide-y">
+                      {missing.map((m, i) => (
+                        <li
+                          key={`${m.kind}-${i}`}
+                          className="flex items-baseline justify-between gap-3 py-2 text-sm"
+                        >
+                          <span>
+                            {m.name}
+                            <span className="block text-xs text-muted-foreground">
+                              {m.kind === "recurring"
+                                ? `gasto fijo del mes, desde ${m.accountName}`
+                                : `cobro esperado${m.expectedDate ? ` al ${m.expectedDate}` : ""}`}
+                            </span>
+                          </span>
+                          <Amount
+                            amount={m.amount}
+                            currency={m.currency}
+                            className="shrink-0"
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="pt-2 text-xs text-muted-foreground">
+                      Los gastos fijos se cargan desde el plan del mes; los
+                      cobros, desde la pantalla de carga.
+                    </p>
+                  </>
+                ) : (
+                  <Empty className="py-4">
+                    <EmptyTitle>Nada pendiente</EmptyTitle>
+                    <EmptyDescription>
+                      No hay gastos fijos ni cobros esperados sin cargar este
+                      mes.
+                    </EmptyDescription>
+                  </Empty>
+                )}
+              </CardContent>
+            </Card>
 
+            {unresolved.length ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Diferencias sin resolver</CardTitle>
+                  <CardDescription>
+                    <strong className="font-medium">Ajustar</strong> deja la
+                    cuenta en el saldo del homebanking con un asiento contra
+                    equity — para lo que no se arregla cargando un movimiento,
+                    como la revalorización de los CEDEARs o una comisión.{" "}
+                    <strong className="font-medium">Ignorar</strong> no toca
+                    nada: es para cuando ya sabés qué falta y lo vas a cargar.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y">
+                    {unresolved.map((h) => (
+                      <li
+                        key={h.id}
+                        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm"
+                      >
+                        <AccountName name={h.account}>
+                          <span className="money text-muted-foreground">
+                            {" · "}
+                            {h.date}
+                          </span>
+                        </AccountName>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <Amount
+                            amount={h.difference}
+                            currency={h.currency}
+                            sign
+                            tone="negative"
+                          />
+                          <form action={adjustAction}>
+                            <input type="hidden" name="id" value={h.id} />
+                            <input
+                              type="hidden"
+                              name="accountId"
+                              value={h.accountId}
+                            />
+                            <input
+                              type="hidden"
+                              name="toBalance"
+                              value={h.statementBalance}
+                            />
+                            <input type="hidden" name="date" value={h.date} />
+                            <Button type="submit" variant="outline" size="xs">
+                              Ajustar
+                            </Button>
+                          </form>
+                          <form action={ignoreAction}>
+                            <input type="hidden" name="id" value={h.id} />
+                            <Button type="submit" variant="ghost" size="xs">
+                              Ignorar
+                            </Button>
+                          </form>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : null}
 
-      </div>
-      <div className="flex flex-col gap-8">
-      {/* La segunda mitad, que es la que vale: qué es lo más probable que
-          falte. No adivina gastos sueltos — apunta a lo que la app ya sabe que
-          tiene que pasar y todavía no vio. */}
-      {missing.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs uppercase tracking-wide opacity-60">
-            Probablemente falte cargar esto
-          </h2>
-          <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
-            {missing.map((m, i) => (
-              <li
-                key={`${m.kind}-${i}`}
-                className="py-2 flex items-baseline justify-between gap-3 text-sm"
-              >
-                <span>
-                  {m.name}
-                  <span className="opacity-50">
-                    {" "}
-                    ·{" "}
-                    {m.kind === "recurring"
-                      ? `gasto fijo del mes, desde ${m.accountName}`
-                      : `cobro esperado${m.expectedDate ? ` al ${m.expectedDate}` : ""}`}
-                  </span>
-                </span>
-                <span className="tabular-nums shrink-0">
-                  {formatMoney(m.amount, m.currency)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs opacity-55">
-            Los gastos fijos se cargan desde el plan del mes; los cobros, desde
-            la pantalla de carga.
-          </p>
-        </section>
-      ) : (
-        <p className="text-sm opacity-60">
-          No hay gastos fijos ni cobros esperados pendientes de cargar este mes.
-        </p>
-      )}
-
-      {unresolved.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs uppercase tracking-wide opacity-60">
-            Diferencias sin resolver
-          </h2>
-          <p className="text-xs opacity-55">
-            <strong>Ajustar</strong> deja la cuenta en el saldo del homebanking
-            con un asiento de ajuste — para lo que no se arregla cargando un
-            movimiento, como la revalorización de los CEDEARs o una comisión.
-            <strong> Ignorar</strong> no toca nada: es para cuando ya sabés qué
-            falta y lo vas a cargar.
-          </p>
-          <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
-            {unresolved.map((h) => (
-              <li
-                key={h.id}
-                className="py-2 flex items-baseline justify-between gap-3 text-sm"
-              >
-                <span>
-                  {h.account}
-                  <span className="opacity-50"> · {h.date}</span>
-                </span>
-                <span className="flex items-baseline gap-3 shrink-0">
-                  <span className="tabular-nums text-red-600 dark:text-red-400">
-                    {formatMoney(h.difference, h.currency, { sign: true })}
-                  </span>
-                  {/* Ajustar deja la cuenta en el saldo del homebanking con un
-                      asiento contra Equity:Ajustes. Ignorar no toca nada: es
-                      para cuando ya sabés qué falta y lo vas a cargar. */}
-                  <form action={adjustAction}>
-                    <input type="hidden" name="id" value={h.id} />
-                    <input type="hidden" name="accountId" value={h.accountId} />
-                    <input
-                      type="hidden"
-                      name="toBalance"
-                      value={h.statementBalance}
-                    />
-                    <input type="hidden" name="date" value={h.date} />
-                    <button type="submit" className="underline text-xs">
-                      Ajustar
-                    </button>
-                  </form>
-                  <form action={ignoreAction}>
-                    <input type="hidden" name="id" value={h.id} />
-                    <button
-                      type="submit"
-                      className="underline opacity-50 text-xs"
-                    >
-                      Ignorar
-                    </button>
-                  </form>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {history.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs uppercase tracking-wide opacity-60">
-            Historial
-          </h2>
-          <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
-            {history.map((h) => (
-              <li
-                key={h.id}
-                className="py-2 flex items-baseline justify-between gap-3 text-sm"
-              >
-                <span className="opacity-70">
-                  {h.date} · {h.account}
-                </span>
-                <span className="tabular-nums shrink-0 opacity-70">
-                  {Number(h.difference) === 0
-                    ? "coincide"
-                    : formatMoney(h.difference, h.currency, { sign: true })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      </div>
-      </div>
-    </main>
+            {history.length ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Historial</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y">
+                    {history.map((h) => (
+                      <li
+                        key={h.id}
+                        className="flex items-baseline justify-between gap-3 py-2 text-sm text-muted-foreground"
+                      >
+                        <AccountName name={h.account}>
+                          <span className="money">{` · ${h.date}`}</span>
+                        </AccountName>
+                        {Number(h.difference) === 0 ? (
+                          <span className="shrink-0 text-positive">
+                            coincide
+                          </span>
+                        ) : (
+                          <Amount
+                            amount={h.difference}
+                            currency={h.currency}
+                            sign
+                            tone="plain"
+                            className="shrink-0"
+                          />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : null}
+          </>
+        }
+      />
+    </PageShell>
   );
 }

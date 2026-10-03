@@ -1,16 +1,24 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { PlusIcon } from "lucide-react";
 import {
   approveMonthAction,
   unapproveMonthAction,
   type PlanActionState,
 } from "./actions";
+import { FormStatus } from "@/components/form-status";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 
 const initial: PlanActionState = { status: "idle" };
-
-const field =
-  "rounded-lg border border-black/15 dark:border-white/20 bg-transparent px-3 py-2 outline-none focus:border-black/50 dark:focus:border-white/50";
 
 export function ApproveForm({
   period,
@@ -29,76 +37,72 @@ export function ApproveForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <form action={action} className="flex flex-col gap-3">
+      <form action={action}>
         <input type="hidden" name="period" value={period} />
 
-        {envelopes.length ? (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-xs uppercase tracking-wide opacity-60">
-              Puntuales del mes
-            </legend>
-            {extras.map((key) => (
-              <div key={key} className="grid grid-cols-[1fr_1fr_1fr] gap-2">
-                <select name="extraEnvelopeId" className={field} defaultValue="">
-                  <option value="">—</option>
-                  {envelopes.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  name="extraAmount"
-                  inputMode="decimal"
-                  placeholder="200.000"
-                  autoComplete="off"
-                  className={`${field} tabular-nums`}
-                />
-                <input
-                  name="extraNote"
-                  placeholder="cumple de Rochi"
-                  autoComplete="off"
-                  className={field}
-                />
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setExtras((e) => [...e, (e.at(-1) ?? 0) + 1])}
-              className="self-start text-sm underline opacity-70"
-            >
-              Agregar otro
-            </button>
-          </fieldset>
-        ) : null}
+        <FieldGroup className="gap-4">
+          {/* Los puntuales son los sobres sin regla de aporte: el cumpleaños de
+              Rochi no entra en la cascada, se agrega a mano el mes que toca. */}
+          {envelopes.length ? (
+            <FieldSet>
+              <FieldLegend variant="label">Puntuales del mes</FieldLegend>
+              <FieldGroup className="gap-2">
+                {extras.map((key) => (
+                  <div key={key} className="grid grid-cols-3 gap-2">
+                    <NativeSelect name="extraEnvelopeId" defaultValue="">
+                      <option value="">—</option>
+                      {envelopes.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                    <Input
+                      name="extraAmount"
+                      inputMode="decimal"
+                      placeholder="200.000"
+                      autoComplete="off"
+                      className="money h-9"
+                    />
+                    <Input
+                      name="extraNote"
+                      placeholder="cumple de Rochi"
+                      autoComplete="off"
+                      className="h-9"
+                    />
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExtras((e) => [...e, (e.at(-1) ?? 0) + 1])}
+                  className="self-start"
+                >
+                  <PlusIcon /> Agregar otro
+                </Button>
+              </FieldGroup>
+            </FieldSet>
+          ) : null}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-lg bg-foreground text-background px-4 py-3 font-medium disabled:opacity-50"
-        >
-          {pending
-            ? "Calculando…"
-            : approved
-              ? "Recalcular y aprobar de nuevo"
-              : "Aprobar el plan del mes"}
-        </button>
+          <Field>
+            <Button type="submit" size="lg" disabled={pending} className="h-11">
+              {pending
+                ? "Calculando…"
+                : approved
+                  ? "Recalcular y aprobar de nuevo"
+                  : "Aprobar el plan del mes"}
+            </Button>
+          </Field>
+        </FieldGroup>
       </form>
 
       {approved && planId ? <UnapproveButton planId={planId} /> : null}
 
-      {state.status !== "idle" ? (
-        <p
-          role="status"
-          className={`text-sm ${
-            state.status === "error"
-              ? "text-red-600 dark:text-red-400"
-              : "text-green-700 dark:text-green-400"
-          }`}
-        >
-          {state.message}
-        </p>
-      ) : null}
+      <FormStatus
+        status={state.status}
+        message={state.status === "idle" ? undefined : state.message}
+      />
     </div>
   );
 }
@@ -111,15 +115,11 @@ function UnapproveButton({ planId }: { planId: string }) {
   return (
     <form action={action}>
       <input type="hidden" name="planId" value={planId} />
-      <button
-        type="submit"
-        disabled={pending}
-        className="text-sm underline opacity-60 disabled:opacity-30"
-      >
+      <Button type="submit" variant="link" size="sm" disabled={pending}>
         {pending ? "Deshaciendo…" : "Deshacer la aprobación"}
-      </button>
+      </Button>
       {state.status === "error" ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{state.message}</p>
+        <p className="text-sm text-destructive">{state.message}</p>
       ) : null}
     </form>
   );

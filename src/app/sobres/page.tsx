@@ -11,6 +11,17 @@ import {
 } from "@/db/queries";
 import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
+import { Amount } from "@/components/money";
+import { PageHeader, PageShell, TwoColumn } from "@/components/page";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { MoveForm } from "./move-form";
 
 export const dynamic = "force-dynamic";
@@ -53,125 +64,140 @@ export default async function SobresPage() {
     goalProgress(db, { rate, period: planning }),
   ]);
 
+  const planningLabel = new Intl.DateTimeFormat("es-AR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${planning}T00:00:00Z`));
+
   return (
-    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Sobres</h1>
+    <PageShell>
+      <PageHeader title="Sobres">
+        Cuánta plata tiene cada propósito. El aporte de las metas es el que hace
+        falta desde {planningLabel}, con lo ya asignado descontado.
+      </PageHeader>
 
-      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
-      <div className="flex flex-col gap-8">
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Saldo por sobre
-        </h2>
-        <p className="text-xs opacity-50">
-          El aporte de las metas es el que hace falta desde{" "}
-          {new Intl.DateTimeFormat("es-AR", {
-            month: "long",
-            year: "numeric",
-            timeZone: "UTC",
-          }).format(new Date(`${planning}T00:00:00Z`))}
-          , con lo ya asignado descontado.
-        </p>
-        <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
-          {envelopes.map((e) => {
-            const rows = balances.filter((b) => b.envelopeId === e.id);
-            const withMoney = rows.filter(
-              (b) => Number(b.balance) !== 0 || Number(b.spent) !== 0,
-            );
-            const shown = withMoney.length ? withMoney : rows.slice(0, 1);
-            const goal = goals.find((g) => g.envelopeId === e.id);
-            const month = allocated.filter((a) => a.envelopeId === e.id);
+      <TwoColumn
+        flip
+        main={
+          <Card>
+            <CardHeader>
+              <CardTitle>Saldo por sobre</CardTitle>
+              <CardDescription>
+                El saldo es Σ asignado − Σ gastado, y arrastra meses anteriores
+                en los sobres que acumulan.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y">
+                {envelopes.map((e) => {
+                  const rows = balances.filter((b) => b.envelopeId === e.id);
+                  const withMoney = rows.filter(
+                    (b) => Number(b.balance) !== 0 || Number(b.spent) !== 0,
+                  );
+                  const shown = withMoney.length ? withMoney : rows.slice(0, 1);
+                  const goal = goals.find((g) => g.envelopeId === e.id);
+                  const month = allocated.filter((a) => a.envelopeId === e.id);
+                  const negative = shown.some((b) => Number(b.balance) < 0);
 
-            return (
-              <li key={e.id} className="py-3 flex flex-col gap-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="font-medium">{e.name}</span>
-                  <span className="flex flex-col items-end">
-                    {shown.map((b) => (
-                      <span
-                        key={b.currency}
-                        className={`tabular-nums ${
-                          Number(b.balance) < 0
-                            ? "text-red-600 dark:text-red-400"
-                            : ""
-                        }`}
-                      >
-                        {formatMoney(b.balance, b.currency)}
-                      </span>
-                    ))}
+                  return (
+                    <li key={e.id} className="flex flex-col gap-1.5 py-3">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-medium">{e.name}</span>
+                        <span className="flex shrink-0 flex-col items-end">
+                          {shown.map((b) => (
+                            <Amount
+                              key={b.currency}
+                              amount={b.balance}
+                              currency={b.currency}
+                            />
+                          ))}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {month.length ? (
+                          <span className="money">
+                            Este mes se le asignó{" "}
+                            {month
+                              .map((m) => formatMoney(m.total, m.currency))
+                              .join(" + ")}
+                          </span>
+                        ) : null}
+                        {shown.some((b) => Number(b.spent) !== 0) ? (
+                          <span className="money">
+                            Gastado{" "}
+                            {shown
+                              .filter((b) => Number(b.spent) !== 0)
+                              .map((b) => formatMoney(b.spent, b.currency))
+                              .join(" + ")}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {goal ? <GoalBar goal={goal} /> : null}
+
+                      {negative ? (
+                        <p className="text-xs text-negative">
+                          En negativo — hay que cubrirlo de otro sobre.
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        }
+        aside={
+          <>
+            {/* El pool: lo que todavía no tiene propósito. Era el síntoma exacto
+                del problema — 2.706.000 sin destino al abrir. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Sin asignar</CardTitle>
+                <CardDescription>
+                  Plata que todavía no tiene propósito. No resta los resúmenes
+                  de tarjeta pendientes: la fórmula mira solo las cuentas de
+                  activo.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-x-8 gap-y-2">
+                {pool.map((p) => (
+                  <span key={p.currency} className="flex flex-col">
+                    <span className="text-xs text-muted-foreground">
+                      {p.currency}
+                    </span>
+                    <Amount
+                      amount={p.pool}
+                      currency={p.currency}
+                      className="font-heading text-2xl font-medium"
+                    />
                   </span>
-                </div>
+                ))}
+              </CardContent>
+            </Card>
 
-                {month.length ? (
-                  <p className="text-xs opacity-55">
-                    Este mes se le asignó{" "}
-                    {month
-                      .map((m) => formatMoney(m.total, m.currency))
-                      .join(" + ")}
-                  </p>
-                ) : null}
-
-                {shown.some((b) => Number(b.spent) !== 0) ? (
-                  <p className="text-xs opacity-55">
-                    Gastado{" "}
-                    {shown
-                      .filter((b) => Number(b.spent) !== 0)
-                      .map((b) => formatMoney(b.spent, b.currency))
-                      .join(" + ")}
-                  </p>
-                ) : null}
-
-                {goal ? <GoalBar goal={goal} /> : null}
-
-                {shown.some((b) => Number(b.balance) < 0) ? (
-                  <p className="text-xs text-red-600 dark:text-red-400">
-                    En negativo — hay que cubrirlo de otro sobre.
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-
-      </div>
-      <div className="flex flex-col gap-8 lg:order-first">
-      {/* El pool: lo que todavía no tiene propósito. Era el síntoma exacto del
-          problema — 2.706.000 sin destino al abrir. */}
-      <section className="flex flex-col gap-1">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Sin asignar
-        </h2>
-        <div className="flex gap-6">
-          {pool.map((p) => (
-            <span key={p.currency} className="tabular-nums">
-              {formatMoney(p.pool, p.currency)}
-            </span>
-          ))}
-        </div>
-        <p className="text-xs opacity-50">
-          No resta los resúmenes de tarjeta pendientes: la fórmula mira solo las
-          cuentas de activo.
-        </p>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Mover plata de propósito
-        </h2>
-        <p className="text-xs opacity-55">
-          Esto no mueve plata de ninguna cuenta: cambia para qué es. Mover entre
-          sobres son dos filas; devolver al pool, una negativa.
-        </p>
-        <MoveForm
-          envelopes={envelopes.map((e) => ({ id: e.id, name: e.name }))}
-          today={today}
-        />
-      </section>
-      </div>
-      </div>
-    </main>
+            <Card>
+              <CardHeader>
+                <CardTitle>Mover plata de propósito</CardTitle>
+                <CardDescription>
+                  Esto no mueve plata de ninguna cuenta: cambia para qué es.
+                  Mover entre sobres son dos filas; devolver al pool, una
+                  negativa.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <MoveForm
+                  envelopes={envelopes.map((e) => ({ id: e.id, name: e.name }))}
+                  today={today}
+                />
+              </CardContent>
+            </Card>
+          </>
+        }
+      />
+    </PageShell>
   );
 }
 
@@ -182,30 +208,39 @@ function GoalBar({
 }) {
   const target = Number(goal.targetAmount);
   const progress = Number(goal.progress);
-  const pct = target > 0 ? Math.min(100, Math.max(0, (progress / target) * 100)) : 0;
+  const pct =
+    target > 0 ? Math.min(100, Math.max(0, (progress / target) * 100)) : 0;
 
   return (
-    <div className="flex flex-col gap-1 pt-1">
-      <div className="h-1.5 w-full rounded-full bg-black/10 dark:bg-white/15 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-foreground"
-          style={{ width: `${pct}%` }}
-        />
+    <div className="flex flex-col gap-1.5 pt-1">
+      <Progress value={pct} className="h-1.5" />
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <span className="money">
+          {formatMoney(goal.progress, goal.targetCurrency)} de{" "}
+          {formatMoney(goal.targetAmount, goal.targetCurrency)} · falta{" "}
+          {formatMoney(goal.remaining, goal.targetCurrency)}
+        </span>
+        {goal.monthsRemaining !== null ? (
+          <Badge variant="outline" className="money">
+            {goal.monthsRemaining}{" "}
+            {goal.monthsRemaining === 1 ? "mes" : "meses"} ·{" "}
+            {formatMoney(goal.suggestedContribution, goal.targetCurrency)}/mes
+          </Badge>
+        ) : (
+          <Badge variant="ghost">sin fecha</Badge>
+        )}
+        {/* La fecha dura no es un adorno: es lo que hace que el nivel variable
+            tenga que completar el faltante del piso. */}
+        {goal.deadlineHard ? <Badge variant="secondary">fecha dura</Badge> : null}
       </div>
-      <p className="text-xs opacity-60 tabular-nums">
-        {formatMoney(goal.progress, goal.targetCurrency)} de{" "}
-        {formatMoney(goal.targetAmount, goal.targetCurrency)} · falta{" "}
-        {formatMoney(goal.remaining, goal.targetCurrency)}
-        {goal.monthsRemaining !== null
-          ? ` · ${goal.monthsRemaining} ${goal.monthsRemaining === 1 ? "mes" : "meses"}, ${formatMoney(goal.suggestedContribution, goal.targetCurrency)}/mes`
-          : " · sin fecha"}
-        {goal.deadlineHard ? " · fecha dura" : ""}
-      </p>
+
+      {/* El progreso de una meta NO es el saldo del sobre: gastar en la meta
+          misma es la meta cumpliéndose, no plata que haya que volver a juntar. */}
       {Number(goal.spent) !== 0 ? (
-        <p className="text-xs opacity-50">
-          Ya gastado de la meta:{" "}
-          {formatMoney(goal.spent, goal.targetCurrency)} · disponible{" "}
-          {formatMoney(goal.available, goal.targetCurrency)}
+        <p className="money text-xs text-muted-foreground">
+          Ya gastado de la meta: {formatMoney(goal.spent, goal.targetCurrency)} ·
+          disponible {formatMoney(goal.available, goal.targetCurrency)}
         </p>
       ) : null}
     </div>

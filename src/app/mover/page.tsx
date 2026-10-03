@@ -2,9 +2,17 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { accountBalances, rateForView, recentTransactions } from "@/db/queries";
-import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
-import { DeleteButton } from "../delete-button";
+import { PageHeader, PageShell, TwoColumn } from "@/components/page";
+import { TransactionList } from "@/components/transaction-list";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { MoveMoneyForm } from "./move-money-form";
 
 export const dynamic = "force-dynamic";
@@ -59,66 +67,53 @@ export default async function MoverPage() {
   const moves = recent.filter((r) => r.kind !== "gasto" && r.kind !== "apertura");
 
   return (
-    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Mover plata</h1>
-
-      <p className="text-sm opacity-70">
+    <PageShell>
+      <PageHeader title="Mover plata">
         Pasar plata a Mercado Pago, pagar el resumen de la tarjeta y comprar
-        dólares. Los tres son lo mismo por dentro y <strong>ninguno es un
-        gasto</strong>: son justo los casos donde se rompe una app de lista de
-        movimientos.
-      </p>
+        dólares. Los tres son lo mismo por dentro y{" "}
+        <strong className="font-medium text-foreground">
+          ninguno es un gasto
+        </strong>
+        : son justo los casos donde se rompe una app de lista de movimientos.
+      </PageHeader>
 
-      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8 lg:items-start">
-            <MoveMoneyForm
-        accounts={options}
-        envelopes={envelopes.map((e) => ({ id: e.id, name: e.name }))}
-        today={today}
-        rate={rate}
+      <TwoColumn
+        main={
+          <Card>
+            <CardContent>
+              <MoveMoneyForm
+                accounts={options}
+                envelopes={envelopes.map((e) => ({ id: e.id, name: e.name }))}
+                today={today}
+                rate={rate}
+              />
+            </CardContent>
+          </Card>
+        }
+        aside={
+          <Card>
+            <CardHeader>
+              <CardTitle>Movimientos que no son gastos</CardTitle>
+              <CardDescription>
+                Transferencias, pagos de resumen y cambios de moneda.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {moves.length ? (
+                <TransactionList rows={moves} />
+              ) : (
+                <Empty className="py-6">
+                  <EmptyTitle>Nada todavía</EmptyTitle>
+                  <EmptyDescription>
+                    Acá van las transferencias, los pagos de resumen y las
+                    compras de dólares.
+                  </EmptyDescription>
+                </Empty>
+              )}
+            </CardContent>
+          </Card>
+        }
       />
-
-      {moves.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs uppercase tracking-wide opacity-60">
-            Últimos movimientos que no son gastos
-          </h2>
-          <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
-            {moves.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-baseline gap-3 py-2 text-sm"
-              >
-                <span className="w-12 shrink-0 opacity-50 tabular-nums">
-                  {t.date.slice(5)}
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="truncate block">
-                    {t.description ?? t.payee ?? "—"}
-                  </span>
-                  <span className="text-xs opacity-50">{t.kind}</span>
-                </span>
-                <span className="flex flex-col items-end shrink-0 tabular-nums">
-                  {t.kind === "cambio" && t.outflows.length ? (
-                    <span className="text-xs opacity-50">
-                      {t.outflows
-                        .map((o) => formatMoney(o.amount, o.currency))
-                        .join(" + ")}
-                      {" →"}
-                    </span>
-                  ) : null}
-                  {t.inflows.map((i) => (
-                    <span key={i.currency}>
-                      {formatMoney(i.amount, i.currency)}
-                    </span>
-                  ))}
-                </span>
-                <DeleteButton id={t.id} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      </div>
-    </main>
+    </PageShell>
   );
 }

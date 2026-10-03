@@ -6,9 +6,17 @@ import {
   payeeSuggestions,
   recentTransactions,
 } from "@/db/queries";
-import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
-import { DeleteButton } from "./delete-button";
+import { PageHeader, PageShell, TwoColumn } from "@/components/page";
+import { TransactionList } from "@/components/transaction-list";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { QuickEntry, type EnvelopeOption, type Option } from "./quick-entry";
 
 /** Siempre contra la base: es un solo usuario y los datos cambian al cargar. */
@@ -79,77 +87,57 @@ export default async function Page() {
     sources.find((s) => s.name === "Mercado Pago") ?? sources[0];
 
   return (
-    <main className="mx-auto w-full max-w-xl lg:max-w-6xl px-5 py-8 flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Cargar gasto</h1>
+    <PageShell>
+      <PageHeader title="Cargar gasto">
+        Si esto pasa de diez segundos, la app se abandona en tres semanas. El
+        comercio sugiere categoría, sobre y cuenta; lo único que no se puede
+        adivinar es el monto.
+      </PageHeader>
 
-      <div className="grid lg:grid-cols-2 lg:gap-12 gap-8">
-      <QuickEntry
-        categories={categories}
-        envelopes={envelopeOptions}
-        sources={sources}
-        suggestions={suggestions.map((s) => ({
-          payee: s.payee,
-          expenseAccountId: s.expenseAccountId,
-          envelopeId: s.envelopeId,
-          paidFromAccountId: s.paidFromAccountId,
-          currency: s.currency,
-        }))}
-        today={todayInBuenosAires()}
-        defaultSourceId={defaultSource?.id ?? ""}
+      <TwoColumn
+        main={
+          <Card>
+            <CardContent>
+              <QuickEntry
+                categories={categories}
+                envelopes={envelopeOptions}
+                sources={sources}
+                suggestions={suggestions.map((s) => ({
+                  payee: s.payee,
+                  expenseAccountId: s.expenseAccountId,
+                  envelopeId: s.envelopeId,
+                  paidFromAccountId: s.paidFromAccountId,
+                  currency: s.currency,
+                }))}
+                today={todayInBuenosAires()}
+                defaultSourceId={defaultSource?.id ?? ""}
+              />
+            </CardContent>
+          </Card>
+        }
+        aside={
+          <Card>
+            <CardHeader>
+              <CardTitle>Últimos movimientos</CardTitle>
+              <CardDescription>
+                Todo lo que entró al libro, no solo los gastos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recent.length === 0 ? (
+                <Empty className="py-6">
+                  <EmptyTitle>Todavía no hay nada cargado</EmptyTitle>
+                  <EmptyDescription>
+                    El primer gasto que cargues aparece acá.
+                  </EmptyDescription>
+                </Empty>
+              ) : (
+                <TransactionList rows={recent} />
+              )}
+            </CardContent>
+          </Card>
+        }
       />
-
-      <section className="flex flex-col gap-2 lg:mt-0">
-        <h2 className="text-xs uppercase tracking-wide opacity-60">
-          Últimos movimientos
-        </h2>
-        {recent.length === 0 ? (
-          <p className="text-sm opacity-60">Todavía no hay nada cargado.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
-            {recent.map((t) => (
-              <li key={t.id} className="flex items-baseline gap-3 py-2 text-sm">
-                <span className="w-12 shrink-0 opacity-50 tabular-nums">
-                  {t.date.slice(5)}
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="truncate block">
-                    {t.payee ?? t.description ?? "—"}
-                  </span>
-                  <span className="text-xs opacity-50">
-                    {t.kind === "gasto"
-                      ? (t.envelope ?? t.category?.replace(/^Gastos:/, "") ?? "gasto")
-                      : t.kind}
-                  </span>
-                </span>
-                {/* Un asiento puede tocar varias monedas: se muestran todas.
-                    En un cambio, además, de dónde salió. */}
-                <span className="flex flex-col items-end shrink-0 tabular-nums">
-                  {t.kind === "cambio" && t.outflows.length ? (
-                    <span className="text-xs opacity-50">
-                      {t.outflows
-                        .map((o) => formatMoney(o.amount, o.currency))
-                        .join(" + ")}
-                      {" →"}
-                    </span>
-                  ) : null}
-                  {t.inflows.length ? (
-                    t.inflows.map((i) => (
-                      <span key={i.currency}>
-                        {formatMoney(i.amount, i.currency)}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="opacity-40">—</span>
-                  )}
-                </span>
-                {/* La apertura no se borra: es el punto de partida del libro. */}
-                {t.kind !== "apertura" ? <DeleteButton id={t.id} /> : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      </div>
-    </main>
+    </PageShell>
   );
 }
