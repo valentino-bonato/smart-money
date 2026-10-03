@@ -6,6 +6,7 @@ import {
   Repeat,
   ShoppingCart,
 } from "lucide-react";
+import { AccountDot } from "@/components/account-name";
 import { Amount } from "@/components/money";
 import { DeleteButton } from "@/app/delete-button";
 
@@ -17,6 +18,8 @@ type Row = {
   kind: string;
   envelope?: string | null;
   category?: string | null;
+  source?: string | null;
+  destination?: string | null;
   inflows: { amount: string; currency: "ARS" | "USD" }[];
   outflows: { amount: string; currency: "ARS" | "USD" }[];
 };
@@ -57,6 +60,23 @@ export function TransactionList({
             ? (t.envelope ?? t.category?.replace(/^Gastos:/, "") ?? "gasto")
             : t.kind;
 
+        // De dónde salió la plata. En un gasto alcanza con el origen; en lo que
+        // mueve plata entre cuentas propias importan las dos puntas; en un
+        // ingreso solo importa dónde cayó, porque del otro lado hay una cuenta
+        // de ingreso y no una cuenta de verdad.
+        //
+        // En una apertura o un ajuste no se muestra ninguna: la contrapartida es
+        // técnica, y además el título del ajuste ya nombra la cuenta.
+        const movesBetweenAccounts =
+          t.kind === "transferencia" || t.kind === "pago" || t.kind === "cambio";
+        const silent = t.kind === "apertura" || t.kind === "ajuste";
+        const from = silent ? null : t.source;
+        const to = silent
+          ? null
+          : movesBetweenAccounts || t.kind === "ingreso"
+            ? t.destination
+            : null;
+
         return (
           <li key={t.id} className="flex items-center gap-3 py-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -70,6 +90,27 @@ export function TransactionList({
               <span className="block truncate text-xs text-muted-foreground">
                 <span className="money">{t.date.slice(5)}</span>
                 {showKindLabel ? ` · ${subtitle}` : ""}
+                {from || to ? (
+                  <>
+                    {" · "}
+                    {from ? (
+                      <>
+                        <AccountDot
+                          name={from}
+                          className="inline-block size-2"
+                        />{" "}
+                        {from}
+                      </>
+                    ) : null}
+                    {to ? (
+                      <>
+                        {from ? " → " : "→ "}
+                        <AccountDot name={to} className="inline-block size-2" />{" "}
+                        {to}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
               </span>
             </span>
 

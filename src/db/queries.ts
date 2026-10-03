@@ -366,6 +366,14 @@ export type RecentTransaction = {
   kind: MovementKind;
   envelope: string | null;
   category: string | null;
+  /**
+   * De qué cuenta salió la plata y a cuál entró. El dato siempre estuvo —es la
+   * partida contra la cuenta de activo o pasivo— pero la lista no lo mostraba,
+   * así que no se podía saber si un gasto se pagó con Mercado Pago o con la
+   * tarjeta. Las cuentas de sistema no cuentan: son contrapartida técnica.
+   */
+  source: string | null;
+  destination: string | null;
   /** Lo que entró, por moneda. Un asiento puede tocar varias. */
   inflows: { currency: Currency; amount: string }[];
   /** Lo que salió, por moneda. Solo se muestra en un cambio de moneda. */
@@ -434,6 +442,18 @@ export async function recentTransactions(
         where l.id = r.id limit 1)            as envelope,
       (select l.account_name from legs l
         where l.id = r.id and l.account_type = 'expense' limit 1) as category,
+      -- De dónde salió: la partida negativa sobre una cuenta de verdad. En un
+      -- gasto con tarjeta es la tarjeta; en uno con Mercado Pago, Mercado Pago.
+      (select l.account_name from legs l
+        where l.id = r.id and not l.is_system
+          and l.account_type in ('asset', 'liability') and l.amount < 0
+        order by l.amount limit 1)            as source,
+      -- A dónde entró. Solo tiene sentido en lo que no es gasto: una
+      -- transferencia, un pago de resumen, un cambio de moneda.
+      (select l.account_name from legs l
+        where l.id = r.id and not l.is_system
+          and l.account_type in ('asset', 'liability') and l.amount > 0
+        order by l.amount desc limit 1)       as destination,
       coalesce((
         select json_agg(json_build_object('currency', x.currency,
                                           'amount', x.total::text)
