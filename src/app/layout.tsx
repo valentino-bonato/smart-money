@@ -43,9 +43,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <ThemeScript />
       </head>
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      {/* `lg:flex-row` es lo que pone la navegación al costado: la misma
+          `<Nav>` renderiza la barra de arriba o la columna según el ancho, y
+          acá se decide si va encima del contenido o al lado. El `min-w-0` del
+          contenido no es opcional — sin él una tabla ancha estira el flex y
+          empuja la columna fuera de la pantalla. */}
+      <body className="min-h-full flex flex-col bg-background text-foreground lg:flex-row">
         <Nav />
-        {children}
+        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
       </body>
     </html>
   );
