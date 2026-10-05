@@ -115,8 +115,18 @@ export type AccountBalance = {
   displayOrder: number;
 };
 
+/**
+ * El saldo de cada cuenta.
+ *
+ * Por defecto saltea las que están en cero, que es lo que quiere un selector:
+ * ofrecer una cuenta vacía como origen de una transferencia es ruido. La
+ * pantalla de inicio pide lo contrario (`includeZero`): ahí la lista de cuentas
+ * es un inventario, y una cuenta que desaparece porque quedó en cero se lee
+ * como una cuenta que no existe.
+ */
 export async function accountBalances(
   exec: Executor,
+  opts: { includeZero?: boolean } = {},
 ): Promise<AccountBalance[]> {
   const rows = await exec.execute<AccountBalance>(sql`
     select
@@ -129,7 +139,7 @@ export async function accountBalances(
     from accounts a left join entries e on e.account_id = a.id
     where a.archived_at is null
     group by a.id, a.name, a.type, a.currency, a.display_order
-    having coalesce(sum(e.amount), 0) <> 0
+    ${opts.includeZero ? sql`` : sql`having coalesce(sum(e.amount), 0) <> 0`}
     order by a.display_order
   `);
   return rows as unknown as AccountBalance[];

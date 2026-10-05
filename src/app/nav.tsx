@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
   CheckCheck,
+  House,
   PlusCircle,
   Scale,
   Wallet,
@@ -27,6 +28,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * renglones y agregarles un ícono a cada uno lo manda a tres.
  */
 const LINKS = [
+  // Inicio no es la raíz: la raíz sigue siendo Cargar, que es la pantalla que
+  // se abre quince veces por semana. Mudarla costaría un redirect y un cambio
+  // de hábito para ganar una URL más corta en la pantalla que se mira de vez
+  // en cuando.
+  { href: "/inicio", label: "Inicio", icon: House },
   { href: "/", label: "Cargar", icon: PlusCircle },
   // Presupuesto va segunda: después de cargar un gasto, la pregunta que sigue
   // es "¿cuánto me queda de eso?". Estaba quinta, detrás de tres pantallas que
