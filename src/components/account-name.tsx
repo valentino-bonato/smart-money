@@ -1,5 +1,54 @@
+import Image from "next/image";
+import { HandCoins } from "lucide-react";
 import { cn } from "cn";
 import { institutionFor } from "@/lib/institutions";
+
+/**
+ * El logo de la institución, dentro de un chip de medida fija.
+ *
+ * **El chip existe por el tema oscuro.** Los logos de marca vienen pensados
+ * para fondo claro — el de BBVA es azul marino casi negro — así que sobre el
+ * fondo oscuro de la app desaparecen. El chip blanco los deja legibles en los
+ * dos temas sin tener que mantener una variante por marca.
+ *
+ * Mide siempre 54×34 aunque los logos no: así la columna de texto arranca
+ * alineada en todas las tarjetas. Lo que cambia por marca es el tamaño del
+ * logo adentro, que vive en `institutions.ts`.
+ *
+ * Una cuenta sin institución —"Me deben", "Percepciones a recuperar"— no es un
+ * error: lleva un ícono gris, y arriba dice "Por cobrar" en vez del banco.
+ */
+export function AccountLogo({
+  name,
+  className,
+}: {
+  name: string;
+  className?: string;
+}) {
+  const institution = institutionFor(name);
+
+  return (
+    <span
+      className={cn(
+        "flex h-[34px] w-[54px] shrink-0 items-center justify-center rounded-[9px] border",
+        institution ? "bg-white" : "bg-muted",
+        className,
+      )}
+    >
+      {institution ? (
+        <Image
+          src={institution.logo.src}
+          alt={institution.label}
+          width={institution.logo.width}
+          height={institution.logo.height}
+          unoptimized
+        />
+      ) : (
+        <HandCoins className="size-[18px] text-muted-foreground" aria-hidden />
+      )}
+    </span>
+  );
+}
 
 /**
  * El nombre de una cuenta con el punto de color de su institución.

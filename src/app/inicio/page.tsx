@@ -9,7 +9,8 @@ import {
 } from "@/db/queries";
 import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
-import { AccountName } from "@/components/account-name";
+import { AccountLogo } from "@/components/account-name";
+import { accountDetail, institutionFor } from "@/lib/institutions";
 import { Amount } from "@/components/money";
 import { PageShell } from "@/components/page";
 import { TransactionList } from "@/components/transaction-list";
@@ -106,9 +107,9 @@ export default async function InicioPage() {
           {assets.map((a) => (
             <li
               key={a.accountId}
-              className="flex flex-col gap-2 rounded-xl border p-4"
+              className="flex flex-col gap-3 rounded-xl border p-4"
             >
-              <AccountName name={a.name} className="text-sm leading-snug" />
+              <AccountHeading name={a.name} currency={a.currency} />
               <Amount
                 amount={a.balance}
                 currency={a.currency}
@@ -123,9 +124,9 @@ export default async function InicioPage() {
             {liabilities.map((l) => (
               <li
                 key={l.accountId}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border bg-muted/40 p-4"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border bg-muted/40 p-4"
               >
-                <AccountName name={l.name} className="text-sm leading-snug" />
+                <AccountHeading name={l.name} currency={l.currency} />
                 <Amount
                   amount={l.balance}
                   currency={l.currency}
@@ -147,5 +148,37 @@ export default async function InicioPage() {
         </CardContent>
       </Card>
     </PageShell>
+  );
+}
+
+/**
+ * El logo del banco, el banco, y **cuál de sus cuentas es**.
+ *
+ * El tercer renglón no es redundancia: BBVA aparece cinco veces en esta
+ * pantalla y Cocos dos, así que el logo solo deja cinco tarjetas idénticas. Lo
+ * que las distingue va en negrita y el banco arriba en chico, porque cuando ya
+ * reconociste el logo lo que estás buscando es cuál de las cinco.
+ */
+function AccountHeading({
+  name,
+  currency,
+}: {
+  name: string;
+  currency: "ARS" | "USD";
+}) {
+  const institution = institutionFor(name);
+
+  return (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <AccountLogo name={name} />
+      <span className="flex min-w-0 flex-col">
+        <span className="text-xs font-medium text-muted-foreground">
+          {institution?.label ?? "Por cobrar"}
+        </span>
+        <span className="truncate text-sm font-medium">
+          {accountDetail(name, currency)}
+        </span>
+      </span>
+    </span>
   );
 }

@@ -24,6 +24,16 @@ export type Institution = {
   label: string;
   /** Variable CSS, para usar en `style`. */
   cssVar: string;
+  /**
+   * El logo, con el tamaño al que se dibuja dentro del chip.
+   *
+   * Las medidas van acá y no en el componente porque **cada marca tiene su
+   * proporción**: BBVA es un logotipo apaisado de 160×48, Mercado Pago y Cocos
+   * son cuadrados, Ualá es una onda de 1200×628. Un solo tamaño para los
+   * cuatro deforma tres. El chip sí mide siempre igual, así que la columna de
+   * texto arranca alineada en todas las tarjetas.
+   */
+  logo: { src: string; width: number; height: number };
 };
 
 /**
@@ -37,25 +47,94 @@ export type Institution = {
  * el gris neutro del tema.
  */
 const INSTITUTIONS: (Institution & { match: RegExp })[] = [
-  { key: "bbva", label: "BBVA", cssVar: "--bank-bbva", match: /bbva/i },
+  {
+    key: "bbva",
+    label: "BBVA",
+    cssVar: "--bank-bbva",
+    match: /bbva/i,
+    logo: { src: "/logos/bbva.png", width: 42, height: 13 },
+  },
   {
     key: "mercadopago",
     label: "Mercado Pago",
     cssVar: "--bank-mercadopago",
     match: /mercado\s*pago/i,
+    logo: { src: "/logos/mercadopago.png", width: 26, height: 26 },
   },
   {
     key: "cocos",
     label: "Cocos Capital",
     cssVar: "--bank-cocos",
     match: /cocos/i,
+    logo: { src: "/logos/cocos.png", width: 26, height: 26 },
   },
-  { key: "uala", label: "Ualá", cssVar: "--bank-uala", match: /ual[áa]/i },
+  {
+    key: "uala",
+    label: "Ualá",
+    cssVar: "--bank-uala",
+    match: /ual[áa]/i,
+    logo: { src: "/logos/uala.png", width: 30, height: 16 },
+  },
 ];
 
 export function institutionFor(accountName: string): Institution | null {
   const found = INSTITUTIONS.find((i) => i.match.test(accountName));
   if (!found) return null;
-  const { key, label, cssVar } = found;
-  return { key, label, cssVar };
+  const { key, label, cssVar, logo } = found;
+  return { key, label, cssVar, logo };
+}
+
+/**
+ * Qué cuenta es, una vez que el logo ya dijo de qué banco.
+ *
+ * Hace falta porque el logo solo no alcanza: BBVA tiene cinco cuentas y Cocos
+ * dos, así que cinco tarjetas con el mismo logo necesitan un renglón que las
+ * distinga. Es el nombre de la cuenta **menos** el nombre de la institución,
+ * derivado y no una lista a mano: las cuentas las nombra el usuario, y una
+ * tabla paralela de apodos se desincroniza en cuanto renombra una.
+ *
+ * "BBVA caja de ahorro" → "Caja de ahorro". "Cocos Capital — fondo USD" →
+ * "Fondo USD". Cuando no queda nada —"Mercado Pago", "Ualá"— el nombre ya era
+ * solo el banco, así que lo que distingue es la moneda.
+ */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function accountDetail(
+  accountName: string,
+  currency: "ARS" | "USD",
+): string {
+  const institution = INSTITUTIONS.find((i) => i.match.test(accountName));
+  const currencyWord = currency === "USD" ? "Dólares" : "Pesos";
+  if (!institution) return accountName;
+
+  const rest = accountName
+    // La etiqueta primero y el patrón después, en ese orden y los dos: el
+    // patrón de Cocos es `/cocos/i` y solo sacaría "Cocos", dejando un
+    // "Capital" huérfano. La etiqueta completa ("Cocos Capital") se lleva las
+    // dos palabras, y el patrón queda para las que el usuario escribió
+    // distinto ("Uala" sin tilde).
+    .replace(new RegExp(escapeRegExp(institution.label), "gi"), "")
+    .replace(new RegExp(institution.match.source, "gi"), "")
+    // Los separadores que quedan colgando cuando se va el nombre del banco:
+    // "Cocos Capital — fondo USD" deja " — fondo USD".
+    .replace(/\s+/g, " ")
+    .replace(/^[\s—·-]+|[\s—·-]+$/g, "")
+    // "Ualá en dólares" deja "en dólares": la preposición sobra sin el sujeto.
+    .replace(/^en\s+/i, "")
+    .trim();
+
+  if (!rest) return currencyWord;
+
+  // El código de moneda que viene colgado de un guión se dice en castellano,
+  // que es como se lee el resto de la tarjeta: "Tarjeta de crédito — ARS" queda
+  // mal al lado de "Caja de ahorro".
+  //
+  // **Solo después del guión**, nunca suelto: "Cocos Capital — fondo USD" es el
+  // nombre del fondo, no una aclaración de moneda, y traducirlo lo volvía
+  // "Fondo dólares".
+  const spelled = rest.replace(/([—·-]\s*)ARS$/, "$1pesos").replace(/([—·-]\s*)USD$/, "$1dólares");
+
+  return spelled.charAt(0).toUpperCase() + spelled.slice(1);
 }
