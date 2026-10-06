@@ -3,21 +3,20 @@ import {
   missingEntries,
   reconcilableAccounts,
   reconciliationHistory,
+  type MissingHint,
+  type ReconcilableAccount,
 } from "@/db/reconcile";
+import { formatMoney } from "@/lib/money";
+import { accountDetail, institutionFor } from "@/lib/institutions";
 import { getCurrentUser } from "@/lib/user";
-import { AccountName } from "@/components/account-name";
 import { Amount } from "@/components/money";
-import { PageHeader, PageShell, TwoColumn } from "@/components/page";
-import { Button } from "@/components/ui/button";
+import { PageHeader, PageShell } from "@/components/page";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
-import { adjustAction, ignoreAction } from "./actions";
 import { ReconcileForm } from "./reconcile-form";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +27,20 @@ function todayInBuenosAires(): string {
   }).format(new Date());
 }
 
+function dayLabel(date: string, today: string): string {
+  if (date === today) return "hoy";
+  const d = new Date(`${date}T00:00:00Z`);
+  const t = new Date(`${today}T00:00:00Z`);
+  const days = Math.round((+t - +d) / 86_400_000);
+  if (days === 1) return "ayer";
+  const long = new Intl.DateTimeFormat("es-AR", {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(d);
+  return days < 30 ? `hace ${days} días · ${long}` : long;
+}
+
 export default async function ConciliacionPage() {
   const user = await getCurrentUser();
   const today = todayInBuenosAires();
@@ -36,10 +49,25 @@ export default async function ConciliacionPage() {
   const [accounts, missing, history] = await Promise.all([
     reconcilableAccounts(db, { userId: user.id }),
     missingEntries(db, { userId: user.id, period, today }),
-    reconciliationHistory(db, { userId: user.id, limit: 12 }),
+    reconciliationHistory(db, { userId: user.id, limit: 20 }),
   ]);
 
   const unresolved = history.filter((h) => !h.resolved);
+
+  // La franja de estado: lo que la pantalla no decía y era lo único que
+  // faltaba de verdad — cuál cuenta quedó atrás. Sale de `lastReconciledAt`,
+  // que la consulta ya traía.
+  const dates = accounts
+    .map((a) => a.lastReconciledAt)
+    .filter((d): d is string => Boolean(d));
+  const lastDate = dates.length ? dates.sort().at(-1)! : null;
+  const upToDate = accounts.filter((a) => a.lastReconciledAt === lastDate);
+  const never = accounts.filter((a) => !a.lastReconciledAt);
+
+  // Agrupadas por institución, que es el recorrido real: se abre un
+  // homebanking, se miran sus cuentas, se pasa al siguiente. El formulario
+  // plano pedía un orden que el banco no deja seguir.
+  const groups = groupByInstitution(accounts);
 
   return (
     <PageShell>
@@ -48,186 +76,172 @@ export default async function ConciliacionPage() {
         al peso, el historial está completo y el planner puede confiar en él.
       </PageHeader>
 
-      <TwoColumn
-        main={
-          <Card>
-            <CardHeader>
-              <CardTitle>Saldos del homebanking</CardTitle>
-              <CardDescription>
-                La diferencia es el saldo del banco menos el de la app, y la
-                resta se hace en la base. Positiva: falta cargar un ingreso.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ReconcileForm
-                accounts={accounts.map((a) => ({
-                  accountId: a.accountId,
-                  name: a.name,
-                  currency: a.currency,
-                  computedBalance: a.computedBalance,
-                  lastReconciledAt: a.lastReconciledAt,
-                }))}
-                today={today}
-              />
-            </CardContent>
-          </Card>
-        }
-        aside={
-          <>
-            {/* La segunda mitad, que es la que vale: qué es lo más probable que
-                falte. No adivina gastos sueltos — apunta a lo que la app ya
-                sabe que tiene que pasar y todavía no vio. */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Probablemente falte cargar esto</CardTitle>
-                <CardDescription>
-                  Gastos fijos del mes sin cargo generado, y cobros esperados
-                  cuya fecha ya pasó.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {missing.length ? (
-                  <>
-                    <ul className="divide-y">
-                      {missing.map((m, i) => (
-                        <li
-                          key={`${m.kind}-${i}`}
-                          className="flex items-baseline justify-between gap-3 py-2 text-sm"
-                        >
-                          <span>
-                            {m.name}
-                            <span className="block text-xs text-muted-foreground">
-                              {m.kind === "recurring"
-                                ? `gasto fijo del mes, desde ${m.accountName}`
-                                : `cobro esperado${m.expectedDate ? ` al ${m.expectedDate}` : ""}`}
-                            </span>
-                          </span>
-                          <Amount
-                            amount={m.amount}
-                            currency={m.currency}
-                            className="shrink-0"
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="pt-2 text-xs text-muted-foreground">
-                      Los gastos fijos se cargan desde el plan del mes; los
-                      cobros, desde la pantalla de carga.
-                    </p>
-                  </>
-                ) : (
-                  <Empty className="py-4">
-                    <EmptyTitle>Nada pendiente</EmptyTitle>
-                    <EmptyDescription>
-                      No hay gastos fijos ni cobros esperados sin cargar este
-                      mes.
-                    </EmptyDescription>
-                  </Empty>
-                )}
-              </CardContent>
-            </Card>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-4 rounded-xl border bg-muted/30 p-4">
+        <Stat label="Último cuadre">
+          {lastDate ? dayLabel(lastDate, today) : "nunca"}
+        </Stat>
+        <Stat label="Al día">
+          <span className="money">
+            {lastDate ? upToDate.length : 0} de {accounts.length} cuentas
+          </span>
+        </Stat>
+        {never.length ? (
+          <Stat label="Sin conciliar nunca">
+            {never.map((a) => a.name).join(" · ")}
+          </Stat>
+        ) : null}
+      </section>
 
-            {unresolved.length ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Diferencias sin resolver</CardTitle>
-                  <CardDescription>
-                    <strong className="font-medium">Ajustar</strong> deja la
-                    cuenta en el saldo del homebanking con un asiento contra
-                    equity — para lo que no se arregla cargando un movimiento,
-                    como la revalorización de los CEDEARs o una comisión.{" "}
-                    <strong className="font-medium">Ignorar</strong> no toca
-                    nada: es para cuando ya sabés qué falta y lo vas a cargar.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="divide-y">
-                    {unresolved.map((h) => (
-                      <li
-                        key={h.id}
-                        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm"
-                      >
-                        <AccountName name={h.account}>
-                          <span className="money text-muted-foreground">
-                            {" · "}
-                            {h.date}
-                          </span>
-                        </AccountName>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <Amount
-                            amount={h.difference}
-                            currency={h.currency}
-                            sign
-                            tone="negative"
-                          />
-                          <form action={adjustAction}>
-                            <input type="hidden" name="id" value={h.id} />
-                            <input
-                              type="hidden"
-                              name="accountId"
-                              value={h.accountId}
-                            />
-                            <input
-                              type="hidden"
-                              name="toBalance"
-                              value={h.statementBalance}
-                            />
-                            <input type="hidden" name="date" value={h.date} />
-                            <Button type="submit" variant="outline" size="xs">
-                              Ajustar
-                            </Button>
-                          </form>
-                          <form action={ignoreAction}>
-                            <input type="hidden" name="id" value={h.id} />
-                            <Button type="submit" variant="ghost" size="xs">
-                              Ignorar
-                            </Button>
-                          </form>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {history.length ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Historial</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="divide-y">
-                    {history.map((h) => (
-                      <li
-                        key={h.id}
-                        className="flex items-baseline justify-between gap-3 py-2 text-sm text-muted-foreground"
-                      >
-                        <AccountName name={h.account}>
-                          <span className="money">{` · ${h.date}`}</span>
-                        </AccountName>
-                        {Number(h.difference) === 0 ? (
-                          <span className="shrink-0 text-positive">
-                            coincide
-                          </span>
-                        ) : (
-                          <Amount
-                            amount={h.difference}
-                            currency={h.currency}
-                            sign
-                            tone="plain"
-                            className="shrink-0"
-                          />
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            ) : null}
-          </>
-        }
+      <ReconcileForm
+        groups={groups.map((g) => ({
+          key: g.key,
+          label: g.label,
+          sample: g.accounts[0].name,
+          accounts: g.accounts.map((a) => ({
+            accountId: a.accountId,
+            name: a.name,
+            detail: accountDetail(a.name, a.currency),
+            currency: a.currency,
+            type: a.type,
+            computedBalance: a.computedBalance,
+            lastReconciledAt: a.lastReconciledAt,
+            lastReconciledLabel: a.lastReconciledAt
+              ? dayLabel(a.lastReconciledAt, today)
+              : null,
+            // La diferencia abierta y la hipótesis viajan CON la cuenta, no en
+            // una tarjeta aparte: el problema y lo que hay que hacer con él
+            // tienen que estar en el mismo renglón.
+            pending: unresolved
+              .filter((h) => h.accountId === a.accountId)
+              .map((h) => ({
+                id: h.id,
+                date: h.date,
+                difference: h.difference,
+                statementBalance: h.statementBalance,
+                currency: h.currency,
+              })),
+            hints: missing
+              .filter(
+                (m) => m.kind === "recurring" && m.accountId === a.accountId,
+              )
+              .map((m) => ({
+                name: m.name,
+                amount: formatMoney(m.amount, m.currency),
+              })),
+          })),
+        }))}
+        today={today}
       />
+
+      {/* Lo que falta cargar y NO cuelga de una cuenta: un cobro esperado entra
+          donde el usuario decida, así que no se puede pegar a un renglón. */}
+      <PendingInflows missing={missing} />
+
+      {history.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Últimos cuadres</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {history.slice(0, 12).map((h) => (
+                <li
+                  key={h.id}
+                  className="flex items-baseline justify-between gap-3 py-2 text-sm text-muted-foreground"
+                >
+                  <span className="truncate">
+                    {h.account}
+                    <span className="money">{` · ${h.date}`}</span>
+                  </span>
+                  {Number(h.difference) === 0 ? (
+                    <span className="shrink-0 text-positive">coincide</span>
+                  ) : (
+                    <Amount
+                      amount={h.difference}
+                      currency={h.currency}
+                      sign
+                      tone="plain"
+                      className="shrink-0"
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
     </PageShell>
   );
+}
+
+function Stat({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium">{children}</span>
+    </span>
+  );
+}
+
+function PendingInflows({ missing }: { missing: MissingHint[] }) {
+  const inflows = missing.filter((m) => m.kind === "inflow");
+  if (!inflows.length) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Cobros que ya tendrían que haber entrado</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y">
+          {inflows.map((m, i) => (
+            <li
+              key={i}
+              className="flex items-baseline justify-between gap-3 py-2 text-sm"
+            >
+              <span>
+                {m.name}
+                {m.kind === "inflow" && m.expectedDate ? (
+                  <span className="money block text-xs text-muted-foreground">
+                    esperado al {m.expectedDate}
+                  </span>
+                ) : null}
+              </span>
+              <Amount
+                amount={m.amount}
+                currency={m.currency}
+                className="shrink-0"
+              />
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** El logo manda, así que las cuentas se juntan por institución. */
+function groupByInstitution(accounts: ReconcilableAccount[]) {
+  const groups: {
+    key: string;
+    label: string;
+    accounts: ReconcilableAccount[];
+  }[] = [];
+
+  for (const a of accounts) {
+    const institution = institutionFor(a.name);
+    const key = institution?.key ?? "otras";
+    const label = institution?.label ?? "Sin institución";
+    const found = groups.find((g) => g.key === key);
+    if (found) found.accounts.push(a);
+    else groups.push({ key, label, accounts: [a] });
+  }
+
+  return groups;
 }
