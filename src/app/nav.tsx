@@ -47,9 +47,9 @@ const LINKS = [
   // Presupuesto va segunda: después de cargar un gasto, la pregunta que sigue
   // es "¿cuánto me queda de eso?". Estaba quinta, detrás de tres pantallas que
   // se abren mucho menos.
-  { href: "/presupuesto", label: "Presupuesto", icon: Scale },
+  { href: "/presupuesto", label: "Este mes", icon: Scale },
   { href: "/mover", label: "Mover", icon: ArrowLeftRight },
-  { href: "/sobres", label: "Sobres", icon: Wallet },
+  { href: "/sobres", label: "Presupuestos", icon: Wallet },
   { href: "/plan", label: "Plan", icon: Target },
   { href: "/conciliacion", label: "Conciliar", icon: CheckCheck },
   // Última: el libro completo se abre para buscar algo puntual o para revisar,
