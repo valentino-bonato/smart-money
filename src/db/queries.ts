@@ -619,3 +619,208 @@ export async function monthlyBudget(
   `);
   return rows as unknown as BudgetLine[];
 }
+
+export type LedgerFilters = {
+  /** "YYYY-MM". Sin mes, el libro entero. */
+  month?: string | null;
+  accountId?: string | null;
+  envelopeId?: string | null;
+  kind?: MovementKind | null;
+  /** Busca en comercio y descripción. */
+  q?: string | null;
+};
+
+/**
+ * Los filtros, como un `where` sobre `transactions t`.
+ *
+ * Vive aparte porque lo usan dos consultas —la página y los totales— y tienen
+ * que filtrar **exactamente igual**: un total que no corresponde a la lista que
+ * está arriba es peor que no mostrar total.
+ *
+ * El tipo de movimiento NO está acá: no es una columna, se deduce de las
+ * partidas, así que se filtra después de calcularlo.
+ */
+function ledgerWhere(userId: string, f: LedgerFilters) {
+  const parts = [sql`t.user_id = ${userId}`];
+  if (f.month) {
+    const first = `${f.month}-01`;
+    parts.push(
+      sql`t.date >= ${first}::date and t.date < (${first}::date + interval '1 month')`,
+    );
+  }
+  if (f.q) {
+    const like = `%${f.q}%`;
+    parts.push(sql`(t.payee ilike ${like} or t.description ilike ${like})`);
+  }
+  if (f.accountId) {
+    parts.push(sql`exists (select 1 from entries ea
+                            where ea.transaction_id = t.id
+                              and ea.account_id = ${f.accountId}::uuid)`);
+  }
+  if (f.envelopeId) {
+    parts.push(sql`exists (select 1 from entries ev
+                            where ev.transaction_id = t.id
+                              and ev.envelope_id = ${f.envelopeId}::uuid)`);
+  }
+  return sql.join(parts, sql` and `);
+}
+
+/**
+ * El libro ya clasificado: cada asiento con su tipo, su sobre, de dónde salió
+ * y los totales por moneda.
+ *
+ * Es un fragmento y no dos consultas copiadas porque la lista y los totales de
+ * arriba **tienen que mirar exactamente lo mismo**. Un total que no
+ * corresponde a las filas que están debajo es peor que no mostrar total: el
+ * usuario suma a mano, no le da, y deja de creerle a la pantalla.
+ */
+function enrichedLedger(userId: string, where: ReturnType<typeof ledgerWhere>) {
+  return sql`
+    with legs as (
+      select t.id, e.amount, e.currency, e.envelope_id,
+             a.type as account_type, a.is_system, a.name as account_name
+      from transactions t
+      join entries e on e.transaction_id = t.id
+      join accounts a on a.id = e.account_id
+      where t.user_id = ${userId}
+    ), picked as (
+      select t.id, t.date, t.payee, t.description, t.created_at
+      from transactions t
+      where ${where}
+    ), enriched as (
+      select
+        p.id                     as id,
+        p.date::text             as date,
+        p.payee                  as payee,
+        p.description            as description,
+        p.created_at             as created_at,
+        case
+          when exists (select 1 from legs l
+                        where l.id = p.id and l.account_type = 'expense')
+            then 'gasto'
+          when exists (select 1 from legs l
+                        where l.id = p.id and l.account_name like 'Equity:Opening%')
+            then 'apertura'
+          when exists (select 1 from legs l
+                        where l.id = p.id and l.account_name like 'Equity:FX%')
+            then 'cambio'
+          when exists (select 1 from legs l
+                        where l.id = p.id and l.account_name like 'Equity:Ajustes%')
+            then 'ajuste'
+          when exists (select 1 from legs l
+                        where l.id = p.id and l.account_type = 'income')
+            then 'ingreso'
+          when exists (select 1 from legs l
+                        where l.id = p.id and l.account_type = 'liability'
+                          and l.amount > 0)
+            then 'pago'
+          else 'transferencia'
+        end                      as kind,
+        (select e.name from legs l join envelopes e on e.id = l.envelope_id
+          where l.id = p.id limit 1)            as envelope,
+        (select l.account_name from legs l
+          where l.id = p.id and l.account_type = 'expense' limit 1) as category,
+        (select l.account_name from legs l
+          where l.id = p.id and not l.is_system
+            and l.account_type in ('asset', 'liability') and l.amount < 0
+          order by l.amount limit 1)            as source,
+        (select l.account_name from legs l
+          where l.id = p.id and not l.is_system
+            and l.account_type in ('asset', 'liability') and l.amount > 0
+          order by l.amount desc limit 1)       as destination,
+        coalesce((
+          select json_agg(json_build_object('currency', x.currency,
+                                            'amount', x.total::text)
+                          order by x.total desc)
+          from (select l.currency, sum(l.amount) as total from legs l
+                 where l.id = p.id and not l.is_system and l.amount > 0
+                 group by l.currency) x
+        ), '[]'::json)                          as inflows,
+        coalesce((
+          select json_agg(json_build_object('currency', x.currency,
+                                            'amount', (-x.total)::text)
+                          order by x.total)
+          from (select l.currency, sum(l.amount) as total from legs l
+                 where l.id = p.id and not l.is_system and l.amount < 0
+                 group by l.currency) x
+        ), '[]'::json)                          as outflows
+      from picked p
+    )
+  `;
+}
+
+export type LedgerTotal = {
+  currency: Currency;
+  /** Lo que entró a cuentas propias. */
+  inflow: string;
+  /** Lo que salió de cuentas propias. */
+  outflow: string;
+};
+
+export type LedgerPage = {
+  rows: RecentTransaction[];
+  /** Cuántos asientos matchean el filtro, no cuántos trae esta página. */
+  total: number;
+  /** Lo movido por todo el filtro, no por esta página. */
+  totals: LedgerTotal[];
+};
+
+/**
+ * El libro completo, filtrado y paginado.
+ *
+ * Es `recentTransactions` con filtros: la misma forma de fila, para que
+ * `<TransactionList>` y la tabla ancha muestren lo mismo y un movimiento no se
+ * lea distinto según la pantalla.
+ *
+ * El total de la consulta viaja con las filas (`count(*) over ()`) en vez de
+ * pedirlo por separado: una segunda consulta con el mismo filtro es una
+ * oportunidad más de que los dos no coincidan.
+ */
+export async function ledgerPage(
+  exec: Executor,
+  opts: {
+    userId: string;
+    filters?: LedgerFilters;
+    limit?: number;
+    offset?: number;
+  },
+): Promise<LedgerPage> {
+  const f = opts.filters ?? {};
+  const where = ledgerWhere(opts.userId, f);
+  const cte = enrichedLedger(opts.userId, where);
+  // El tipo no es una columna de `transactions`: se deduce de las partidas, así
+  // que se filtra recién cuando ya está calculado.
+  const kindCond = f.kind ? sql`e.kind = ${f.kind}` : sql`true`;
+
+  const [rows, totals] = await Promise.all([
+    exec.execute<RecentTransaction & { total: number }>(sql`
+      ${cte}
+      select e.*, count(*) over ()::int as total
+      from enriched e
+      where ${kindCond}
+      order by e.date desc, e.created_at desc
+      limit ${opts.limit ?? 25} offset ${opts.offset ?? 0}
+    `),
+    exec.execute<LedgerTotal>(sql`
+      ${cte}
+      select
+        l.currency                                                  as currency,
+        sum(case when l.amount > 0 then l.amount else 0 end)::text   as inflow,
+        sum(case when l.amount < 0 then -l.amount else 0 end)::text  as outflow
+      from enriched e
+      join legs l on l.id = e.id
+      where ${kindCond}
+        and not l.is_system
+        and l.account_type in ('asset', 'liability')
+      group by l.currency
+      order by l.currency
+    `),
+  ]);
+
+  const list = rows as unknown as (RecentTransaction & { total: number })[];
+  return {
+    rows: list.map(({ total: _total, ...r }) => r),
+    total: list[0]?.total ?? 0,
+    totals: totals as unknown as LedgerTotal[],
+  };
+}

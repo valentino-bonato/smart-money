@@ -7,6 +7,7 @@ import {
   CheckCheck,
   House,
   PlusCircle,
+  Receipt,
   Scale,
   Wallet,
   Target,
@@ -51,6 +52,9 @@ const LINKS = [
   { href: "/sobres", label: "Sobres", icon: Wallet },
   { href: "/plan", label: "Plan", icon: Target },
   { href: "/conciliacion", label: "Conciliar", icon: CheckCheck },
+  // Última: el libro completo se abre para buscar algo puntual o para revisar,
+  // no todos los días. Cargar sigue siendo la puerta de entrada.
+  { href: "/movimientos", label: "Movimientos", icon: Receipt },
 ] as const;
 
 function useActive() {

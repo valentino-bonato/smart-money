@@ -140,8 +140,14 @@ export default async function InicioPage() {
       </section>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-wrap items-baseline justify-between gap-3">
           <CardTitle>Últimas actividades</CardTitle>
+          <Link
+            href="/movimientos"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Consultar todas →
+          </Link>
         </CardHeader>
         <CardContent>
           <TransactionList rows={recent} />
