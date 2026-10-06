@@ -99,8 +99,8 @@ export function ReconcileForm({
                 open={needsAttention}
                 className="overflow-hidden rounded-xl border"
               >
-                <summary className="flex cursor-pointer list-none items-center gap-3 bg-muted/40 p-3">
-                  <AccountLogo name={g.sample} />
+                <summary className="flex cursor-pointer list-none items-center gap-3 bg-muted/40 px-4 py-3 [[open]_&]:border-b">
+                  <AccountLogo name={g.sample} className="h-7 w-11" />
                   <span className="text-sm font-semibold">{g.label}</span>
                   <span className="text-xs text-muted-foreground">
                     {g.accounts.length}{" "}
@@ -119,42 +119,44 @@ export function ReconcileForm({
 
                 <ul className="divide-y">
                   {g.accounts.map((a) => (
-                    <li key={a.accountId} className="flex flex-col gap-2 p-3">
+                    <li key={a.accountId} className="flex flex-col gap-2 px-4 py-3">
                       <input
                         type="hidden"
                         name="accountId"
                         value={a.accountId}
                       />
 
-                      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-                        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                          <Label
-                            htmlFor={`statement-${a.accountId}`}
-                            className="flex flex-wrap items-baseline gap-x-2"
-                          >
-                            <span className="font-medium">{a.detail}</span>
-                            <span className="money text-xs font-normal text-muted-foreground">
-                              app: {formatMoney(a.computedBalance, a.currency)}
-                              {a.type === "liability"
-                                ? " · negativo si debés"
-                                : ""}
-                            </span>
-                          </Label>
+                      <div className="flex flex-col gap-1.5">
+                        <Label
+                          htmlFor={`statement-${a.accountId}`}
+                          className="flex flex-wrap items-baseline gap-x-2"
+                        >
+                          <span className="font-medium">{a.detail}</span>
+                          <span className="money text-xs font-normal text-muted-foreground">
+                            app: {formatMoney(a.computedBalance, a.currency)}
+                            {a.type === "liability" ? " · negativo si debés" : ""}
+                          </span>
+                        </Label>
+
+                        {/* El input va angosto: es un número de doce
+                            caracteres, no un párrafo. A ancho completo la
+                            fila se lee como un formulario de alta y no como
+                            un renglón de checklist. */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                           <Input
                             id={`statement-${a.accountId}`}
                             name="statementBalance"
                             inputMode="decimal"
                             autoComplete="off"
-                            placeholder={`saldo del homebanking en ${a.currency}`}
-                            className="money h-9"
+                            placeholder={a.currency === "USD" ? "US$ …" : "$ …"}
+                            className="money h-9 w-44"
                           />
+                          <span className="text-xs text-muted-foreground">
+                            {a.lastReconciledLabel
+                              ? `conciliada ${a.lastReconciledLabel}`
+                              : "sin conciliar nunca"}
+                          </span>
                         </div>
-
-                        <span className="text-xs text-muted-foreground">
-                          {a.lastReconciledLabel
-                            ? `conciliada ${a.lastReconciledLabel}`
-                            : "sin conciliar nunca"}
-                        </span>
                       </div>
 
                       {a.pending.map((p) => (
