@@ -191,6 +191,26 @@ body {
   --bank-mercadopago: #b38f00; /* el amarillo de marca, bajado para contrastar */
   --bank-cocos: #0089b0;
   --bank-uala: #e03a7c;
+
+  /* El color de identidad de cada sobre. Vive solo adentro del ícono de 20px
+     en `/presupuesto`: dice "esto es Comida", no dice cómo viene el mes.
+     NINGUNO es rojo, a propósito — el rojo es el único color con significado
+     de estado en la app ("te pasaste"), y repetirlo como identidad lo gastaría.
+     Dos tonos por categoría porque, igual que con los bancos, un color que
+     contrasta sobre blanco no contrasta sobre negro. */
+  --cat-auto: #b45309;
+  --cat-comida: #15803d;
+  --cat-amigos: #c2410c;
+  --cat-rochi: #be185d;
+  --cat-suscripciones: #6d28d9;
+  --cat-ingles: #1d4ed8;
+  --cat-viaje: #0e7490;
+  --cat-emergencia: #0f766e;
+  --cat-inversion: #4338ca;
+  --cat-impuestos: #57534e;
+  --cat-salud: #a21caf;
+  --cat-puntuales: #475569;
+  --cat-otro: #737373;
 }
 
 .dark {
@@ -198,4 +218,18 @@ body {
   --bank-mercadopago: #ffe600; /* acá sí el amarillo de marca */
   --bank-cocos: #22c3e6;
   --bank-uala: #ff7eb0;
+
+  --cat-auto: #fbbf24;
+  --cat-comida: #4ade80;
+  --cat-amigos: #fb923c;
+  --cat-rochi: #f472b6;
+  --cat-suscripciones: #a78bfa;
+  --cat-ingles: #60a5fa;
+  --cat-viaje: #22d3ee;
+  --cat-emergencia: #2dd4bf;
+  --cat-inversion: #818cf8;
+  --cat-impuestos: #a8a29e;
+  --cat-salud: #e879f9;
+  --cat-puntuales: #94a3b8;
+  --cat-otro: #a3a3a3;
 }

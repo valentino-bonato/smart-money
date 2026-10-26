@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { monthlyBudget, rateForView, type BudgetLine } from "@/db/queries";
+import { envelopeLook } from "@/lib/envelope-icons";
 import { formatMoney } from "@/lib/money";
 import { getCurrentUser } from "@/lib/user";
 import { sumAmounts } from "@/db/ledger";
@@ -230,6 +231,9 @@ function SobreCard({
 
   // Si el sobre recibe una moneda y gasta otra, mostrar el detalle: el total en
   // pesos es una conversión de la vista, no un saldo guardado.
+  const look = envelopeLook(line.name);
+  const Icon = look.icon;
+
   const mixto =
     line.assigned.some((a) => a.currency === "USD") ||
     line.spent.some((s) => s.currency === "USD");
@@ -238,7 +242,18 @@ function SobreCard({
     <Card size="sm" className={over ? "ring-foreground/25" : undefined}>
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2">
-          <span className="truncate">{line.name}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            {/* El color va en `style` y no en una clase: una clase armada como
+                `text-cat-${key}` no la ve el escáner de Tailwind — compila en
+                dev y sale sin color en el build. Mismo motivo que el punto de
+                institución. */}
+            <Icon
+              className="size-4 shrink-0"
+              style={{ color: `var(${look.cssVar})` }}
+              aria-hidden
+            />
+            <span className="truncate">{line.name}</span>
+          </span>
           {over ? (
             <Badge variant="outline" className="shrink-0">
               te pasaste
