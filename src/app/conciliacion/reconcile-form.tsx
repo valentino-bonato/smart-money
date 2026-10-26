@@ -97,24 +97,32 @@ export function ReconcileForm({
               <details
                 key={g.key}
                 open={needsAttention}
-                className="overflow-hidden rounded-xl border"
+                className="group overflow-hidden rounded-xl border"
               >
-                <summary className="flex cursor-pointer list-none items-center gap-3 bg-muted/40 px-4 py-3 [[open]_&]:border-b">
-                  <AccountLogo name={g.sample} className="h-7 w-11" />
-                  <span className="text-sm font-semibold">{g.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {g.accounts.length}{" "}
-                    {g.accounts.length === 1 ? "cuenta" : "cuentas"}
-                  </span>
-                  <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-                    {g.accounts.every((a) => a.lastReconciledAt) ? (
-                      <CheckCircle2
-                        className="size-4 text-positive"
-                        aria-hidden
-                      />
-                    ) : null}
-                    <ChevronDown className="size-4" aria-hidden />
-                  </span>
+                {/* El flex va en un div interno y no en el `<summary>`.
+                    Un summary es `display: list-item`: convertirlo en flex
+                    deja el primer hijo fuera del padding en varios motores, y
+                    el chip del logo terminaba cruzando el borde de la
+                    tarjeta. El summary queda como bloque y adentro manda el
+                    div. */}
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <div className="flex items-center gap-3 bg-muted/40 px-4 py-3 group-open:border-b">
+                    <AccountLogo name={g.sample} className="h-7 w-11" />
+                    <span className="text-sm font-semibold">{g.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {g.accounts.length}{" "}
+                      {g.accounts.length === 1 ? "cuenta" : "cuentas"}
+                    </span>
+                    <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                      {g.accounts.every((a) => a.lastReconciledAt) ? (
+                        <CheckCircle2
+                          className="size-4 text-positive"
+                          aria-hidden
+                        />
+                      ) : null}
+                      <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
+                    </span>
+                  </div>
                 </summary>
 
                 <ul className="divide-y">
