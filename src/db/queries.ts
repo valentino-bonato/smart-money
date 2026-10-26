@@ -188,6 +188,15 @@ export type GoalProgress = {
   monthsRemaining: number | null;
   /** Catch-up: faltante ÷ meses restantes. Sin fecha, el faltante entero. */
   suggestedContribution: string;
+  /**
+   * Cuándo empezó a juntarse: la primera asignación al sobre.
+   *
+   * La meta no tiene fecha de inicio en el esquema y no hace falta inventarla:
+   * una meta empieza cuando entra el primer peso. Sirve para saber qué
+   * porcentaje del tiempo ya pasó, que es lo único que vuelve legible un "19%
+   * juntado" — depende de si faltan siete meses o dos años.
+   */
+  startedAt: string | null;
 };
 
 /**
@@ -263,6 +272,8 @@ export async function goalProgress(
       round(t.progress - t.spent, 4)::text    as available,
       round(t.spent, 4)::text                 as spent,
       m.months                                as "monthsRemaining",
+      (select min(a.date)::text from allocations a
+        where a.envelope_id = e.id)           as "startedAt",
       -- Catch-up: faltante ÷ meses restantes. Al peso, que es como se usa.
       round(
         case when m.months is null or m.months <= 0

@@ -7,6 +7,7 @@ import {
   CheckCheck,
   House,
   PlusCircle,
+  Flag,
   Receipt,
   Scale,
   Wallet,
@@ -43,17 +44,20 @@ const LINKS = [
   // de hábito para ganar una URL más corta en la pantalla que se mira de vez
   // en cuando.
   { href: "/inicio", label: "Inicio", icon: House },
+  // Objetivos arriba de todo, a pedido: es el para qué de la app. Las dos
+  // primeras son las que se miran (cuánto hay, cuánto falta) y recién después
+  // viene la que se usa.
+  { href: "/objetivos", label: "Objetivos", icon: Flag },
   { href: "/", label: "Cargar", icon: PlusCircle },
-  // Presupuesto va segunda: después de cargar un gasto, la pregunta que sigue
-  // es "¿cuánto me queda de eso?". Estaba quinta, detrás de tres pantallas que
-  // se abren mucho menos.
+  // "Este mes" responde la pregunta que sigue a cargar un gasto: ¿cuánto me
+  // queda de eso?
   { href: "/presupuesto", label: "Este mes", icon: Scale },
   { href: "/mover", label: "Mover", icon: ArrowLeftRight },
   { href: "/sobres", label: "Presupuestos", icon: Wallet },
   { href: "/plan", label: "Plan", icon: Target },
   { href: "/conciliacion", label: "Conciliar", icon: CheckCheck },
   // Última: el libro completo se abre para buscar algo puntual o para revisar,
-  // no todos los días. Cargar sigue siendo la puerta de entrada.
+  // no todos los días.
   { href: "/movimientos", label: "Movimientos", icon: Receipt },
 ] as const;
 
